@@ -15,7 +15,7 @@ Without a data store:
 - Contact information must be refetched
 
 <Warning>
-  Baileys previously included `makeInMemoryStore`, but it's not recommended for production use as it stores everything in RAM. For production applications, implement a database-backed store.
+  For production applications, implement a database-backed store. In-memory stores are not recommended for production use as they store everything in RAM and data is lost on restart.
 </Warning>
 
 ## Store Requirements

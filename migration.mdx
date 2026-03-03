@@ -277,24 +277,10 @@ console.log('Created group:', group.id)
 
 ## Store implementation
 
-If you're using `makeInMemoryStore`, the API remains compatible:
-
-```typescript
-import { makeInMemoryStore } from '@whiskeysockets/baileys'
-
-const store = makeInMemoryStore({})
-store.readFromFile('./baileys_store.json')
-
-setInterval(() => {
-  store.writeToFile('./baileys_store.json')
-}, 10_000)
-
-const sock = makeWASocket({ /* ... */ })
-store.bind(sock.ev)
-```
+For production applications, implement a custom store using a database to persist messages, chats, and contacts. See the [Store guide](/concepts/store) for implementation examples using PostgreSQL, MongoDB, or SQLite.
 
 <Tip>
-For production applications, implement a custom store using a database instead of the in-memory store to avoid RAM issues with large chat histories.
+Database-backed stores are recommended over in-memory implementations to avoid RAM issues with large chat histories and ensure data persistence across restarts.
 </Tip>
 
 ## Testing your migration

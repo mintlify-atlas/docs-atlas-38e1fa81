@@ -39,13 +39,17 @@ Let's build a simple bot that echoes received messages back to the sender.
       const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
       
       const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true
+        auth: state
       })
 
       // Handle connection updates
       sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update
+        const { connection, lastDisconnect, qr } = update
+        
+        if (qr) {
+          console.log('QR Code:', qr)
+          // You can use qrcode-terminal to display the QR in terminal
+        }
         
         if (connection === 'close') {
           const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
@@ -135,8 +139,7 @@ async function connectWithPairingCode() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
   
   const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false // Disable QR code
+    auth: state
   })
 
   // Request pairing code if not registered
@@ -186,14 +189,15 @@ Baileys uses an event-driven architecture. Here are the most important events:
 sock.ev.on('connection.update', (update) => {
   const { connection, lastDisconnect, qr } = update
   
+  if (qr) {
+    console.log('QR Code:', qr)
+    // Display QR code to user using qrcode-terminal or other method
+  }
+  
   if (connection === 'close') {
     // Handle disconnection
   } else if (connection === 'open') {
     // Handle successful connection
-  }
-  
-  if (qr) {
-    // QR code received (if printQRInTerminal is false)
   }
 })
 ```

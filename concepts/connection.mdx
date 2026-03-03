@@ -16,24 +16,18 @@ Baileys connects to WhatsApp Web using WebSockets, allowing you to authenticate 
     import makeWASocket, { Browsers } from '@whiskeysockets/baileys'
 
     const sock = makeWASocket({
-        printQRInTerminal: true,
+        auth: state,
         browser: Browsers.ubuntu('My Custom App')
     })
-    ```
 
-    <Note>
-      You can customize the browser name shown in WhatsApp's "Linked Devices" section using the `browser` option.
-    </Note>
-
-    ### Listening for QR Code
-
-    ```typescript
     sock.ev.on('connection.update', (update) => {
         const { connection, qr } = update
         
         if (qr) {
-            // QR code received, display it to user
             console.log('Scan this QR code:', qr)
+            // Use qrcode-terminal to display QR in terminal:
+            // import qrcode from 'qrcode-terminal'
+            // qrcode.generate(qr, { small: true })
         }
         
         if (connection === 'open') {
@@ -41,6 +35,10 @@ Baileys connects to WhatsApp Web using WebSockets, allowing you to authenticate 
         }
     })
     ```
+
+    <Note>
+      You can customize the browser name shown in WhatsApp's "Linked Devices" section using the `browser` option. The QR code is provided through the `connection.update` event.
+    </Note>
   </Tab>
 
   <Tab title="Pairing Code">
@@ -54,7 +52,7 @@ Baileys connects to WhatsApp Web using WebSockets, allowing you to authenticate 
     import makeWASocket from '@whiskeysockets/baileys'
 
     const sock = makeWASocket({
-        printQRInTerminal: false // Must be false for pairing code
+        auth: state
     })
 
     if (!sock.authState.creds.registered) {

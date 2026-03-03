@@ -46,8 +46,8 @@ Configure the thumbnail width in the socket config:
 import makeWASocket from '@whiskeysockets/baileys'
 
 const sock = makeWASocket({
-    linkPreviewImageThumbnailWidth: 192, // default is 192
-    printQRInTerminal: true
+    auth: state,
+    linkPreviewImageThumbnailWidth: 192 // default is 192
 })
 ```
 
@@ -57,8 +57,8 @@ Enable high-quality link previews by uploading the full image to WhatsApp server
 
 ```typescript
 const sock = makeWASocket({
-    generateHighQualityLinkPreview: true, // upload full image
-    printQRInTerminal: true
+    auth: state,
+    generateHighQualityLinkPreview: true // upload full image
 })
 ```
 

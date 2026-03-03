@@ -383,25 +383,36 @@ for (const file of mediaFiles) {
 
 ## Media Cache
 
-Baileys supports caching media to avoid re-uploading the same file:
+To optimize media uploads and avoid re-uploading the same file, implement caching in your custom store by tracking media URLs and hashes:
 
 ```javascript
-import makeWASocket, { makeInMemoryStore } from '@whiskeysockets/baileys'
+import makeWASocket from '@whiskeysockets/baileys'
 
-const store = makeInMemoryStore({})
+// Implement your own media cache
+const mediaCache = new Map()
 
 const sock = makeWASocket({
   // ... auth config
 })
 
-// Store will cache media uploads
-store.bind(sock.ev)
+// Cache media URLs after upload
+sock.ev.on('messages.upsert', ({ messages }) => {
+  for (const msg of messages) {
+    if (msg.message?.imageMessage) {
+      const { url, fileSha256 } = msg.message.imageMessage
+      if (url && fileSha256) {
+        const hash = Buffer.from(fileSha256).toString('base64')
+        mediaCache.set(hash, url)
+      }
+    }
+  }
+})
 
-// First upload - uploads to WhatsApp servers
-await sock.sendMessage(jid1, { image: buffer })
-
-// Second upload of same media - may use cached URL
-await sock.sendMessage(jid2, { image: buffer })
+// Reuse cached URLs when sending same media
+const cachedUrl = mediaCache.get(mediaHash)
+if (cachedUrl) {
+  await sock.sendMessage(jid, { image: { url: cachedUrl } })
+}
 ```
 
 ---

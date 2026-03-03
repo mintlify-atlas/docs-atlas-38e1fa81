@@ -28,12 +28,16 @@ import { useMultiFileAuthState } from '@whiskeysockets/baileys'
 const { state, saveCreds } = await useMultiFileAuthState('auth_info')
 
 const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: true
+    auth: state
 })
 
 sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update
+    const { connection, lastDisconnect, qr } = update
+    
+    if(qr) {
+        console.log('QR Code:', qr)
+    }
+    
     if(connection === 'close') {
         console.log('Connection closed')
     } else if(connection === 'open') {

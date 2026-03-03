@@ -177,8 +177,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  makeInMemoryStore
+  makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys'
 ```
 
@@ -187,11 +186,22 @@ import makeWASocket, {
 Create a simple test file to verify everything is working:
 
 ```typescript test.ts
-import makeWASocket from '@whiskeysockets/baileys'
+import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
 
 const sock = makeWASocket({
-  printQRInTerminal: true
+  auth: state
 })
+
+sock.ev.on('connection.update', (update) => {
+  const { qr } = update
+  if(qr) {
+    console.log('QR Code:', qr)
+  }
+})
+
+sock.ev.on('creds.update', saveCreds)
 
 console.log('Baileys is ready!')
 ```

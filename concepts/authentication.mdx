@@ -214,15 +214,19 @@ const connectToWhatsApp = async () => {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
     
     const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true
+        auth: state
     })
     
     // CRITICAL: Save credentials on every update
     sock.ev.on('creds.update', saveCreds)
     
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update
+        const { connection, lastDisconnect, qr } = update
+        
+        if (qr) {
+            console.log('QR Code:', qr)
+            // Use qrcode-terminal to display in terminal if needed
+        }
         
         if (connection === 'close') {
             const shouldReconnect = 

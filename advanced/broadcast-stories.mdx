@@ -299,18 +299,13 @@ await sock.sendMessage(
 )
 ```
 
-### From Store
+### From Custom Store
 
-If you're using `makeInMemoryStore`:
+If you're using a custom store implementation:
 
 ```typescript
-import { makeInMemoryStore } from '@whiskeysockets/baileys'
-
-const store = makeInMemoryStore({})
-store.bind(sock.ev)
-
-// Get all contacts
-const contacts = Object.values(store.contacts)
+// Retrieve contacts from your database
+const contacts = await db.contacts.findAll()
 const statusJidList = contacts.map(c => c.id)
 
 await sock.sendMessage(
