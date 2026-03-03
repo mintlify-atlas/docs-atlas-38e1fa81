@@ -1,0 +1,301 @@
+---
+title: "Link Previews"
+description: "Automatically generate rich link previews in messages"
+---
+
+## Overview
+
+By default, WhatsApp Web does not generate link previews. Baileys provides a function to automatically generate rich link previews when you send messages containing URLs.
+
+## Setup
+
+Install the required dependency:
+
+```bash
+yarn add link-preview-js
+```
+
+That's it! Baileys will automatically detect and use this library when you send messages with links.
+
+## Automatic Link Previews
+
+Once `link-preview-js` is installed, Baileys automatically generates previews:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Check out Baileys: https://github.com/whiskeysockets/baileys'
+    }
+)
+```
+
+This will automatically:
+1. Detect the URL in the text
+2. Fetch the page metadata (title, description, image)
+3. Generate a thumbnail
+4. Attach the preview to the message
+
+## Configuration
+
+### Thumbnail Width
+
+Configure the thumbnail width in the socket config:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+    linkPreviewImageThumbnailWidth: 192, // default is 192
+    printQRInTerminal: true
+})
+```
+
+### High Quality Previews
+
+Enable high-quality link previews by uploading the full image to WhatsApp servers:
+
+```typescript
+const sock = makeWASocket({
+    generateHighQualityLinkPreview: true, // upload full image
+    printQRInTerminal: true
+})
+```
+
+<Note>
+When `generateHighQualityLinkPreview` is enabled, Baileys uploads the preview image to WhatsApp servers instead of just using a base64 thumbnail. This results in higher quality previews but takes slightly longer.
+</Note>
+
+## Custom Link Previews
+
+You can manually provide link preview data:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Check this out: https://example.com',
+        linkPreview: {
+            'canonical-url': 'https://example.com',
+            'matched-text': 'https://example.com',
+            title: 'Example Website',
+            description: 'This is a custom description',
+            jpegThumbnail: thumbnailBuffer // Buffer containing JPEG image
+        }
+    }
+)
+```
+
+### Type Signature
+
+From `src/Types/Message.ts:102-110`:
+
+```typescript
+export interface WAUrlInfo {
+    'canonical-url': string
+    'matched-text': string
+    title: string
+    description?: string
+    jpegThumbnail?: Buffer
+    highQualityThumbnail?: proto.Message.IImageMessage
+    originalThumbnailUrl?: string
+}
+```
+
+## Disable Link Previews
+
+Send messages without link previews:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'https://example.com',
+        linkPreview: null // explicitly disable
+    }
+)
+```
+
+## How It Works
+
+Baileys uses the `getUrlInfo` utility from `src/Utils/link-preview.ts`:
+
+```typescript
+import { getUrlInfo } from './Utils/link-preview'
+
+const urlInfo = await getUrlInfo(
+    'Check out https://github.com/whiskeysockets/baileys',
+    {
+        thumbnailWidth: 192,
+        fetchOpts: {
+            timeout: 3000
+        },
+        logger,
+        uploadImage: waUploadToServer // optional, for high quality
+    }
+)
+```
+
+The function:
+1. Extracts URLs from text using regex
+2. Fetches page metadata using `link-preview-js`
+3. Downloads and resizes the preview image
+4. Optionally uploads to WhatsApp servers
+5. Returns formatted `WAUrlInfo`
+
+## Advanced Configuration
+
+### Custom Fetch Options
+
+You can configure HTTP request options in the socket config:
+
+```typescript
+const sock = makeWASocket({
+    options: {
+        // Custom fetch options for link preview requests
+        headers: {
+            'User-Agent': 'Custom Bot'
+        },
+        timeout: 5000
+    }
+})
+```
+
+### Timeout Configuration
+
+The default timeout for fetching link previews is 3 seconds. This is hardcoded in `messages-send.ts:1229`:
+
+```typescript
+getUrlInfo: text => getUrlInfo(text, {
+    thumbnailWidth: linkPreviewImageThumbnailWidth,
+    fetchOpts: {
+        timeout: 3_000, // 3 seconds
+        ...(httpRequestOptions || {})
+    },
+    logger,
+    uploadImage: generateHighQualityLinkPreview ? waUploadToServer : undefined
+})
+```
+
+## Examples
+
+### Basic Link Preview
+
+```typescript
+await sock.sendMessage(
+    jid,
+    { text: 'Visit https://github.com/whiskeysockets/baileys' }
+)
+// Automatically generates preview with GitHub repo info
+```
+
+### Multiple Links
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Check these out:\nhttps://github.com\nhttps://npmjs.com'
+    }
+)
+// Generates preview for the first detected link
+```
+
+### Custom Preview with Mentions
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: '@12345678901 check this link: https://example.com',
+        mentions: ['12345678901@s.whatsapp.net'],
+        linkPreview: {
+            'canonical-url': 'https://example.com',
+            'matched-text': 'https://example.com',
+            title: 'Custom Title',
+            description: 'Custom description for the link',
+            jpegThumbnail: await generateThumbnail('https://example.com/image.jpg')
+        }
+    }
+)
+```
+
+## Troubleshooting
+
+### Link Previews Not Working
+
+<Warning>
+Make sure `link-preview-js` is installed:
+
+```bash
+yarn add link-preview-js
+```
+
+Without this dependency, link previews will not be generated.
+</Warning>
+
+### Timeout Errors
+
+If you're getting timeout errors, the target website might be slow or blocking requests:
+
+```typescript
+// Disable link preview for specific messages
+await sock.sendMessage(
+    jid,
+    {
+        text: 'https://slow-website.com',
+        linkPreview: null
+    }
+)
+```
+
+### Custom Thumbnail Generation
+
+If you want to generate custom thumbnails:
+
+```typescript
+import Jimp from 'jimp'
+
+async function generateThumbnail(imageUrl: string): Promise<Buffer> {
+    const image = await Jimp.read(imageUrl)
+    const resized = image.resize(192, Jimp.AUTO)
+    return await resized.getBufferAsync(Jimp.MIME_JPEG)
+}
+
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Check this out: https://example.com',
+        linkPreview: {
+            'canonical-url': 'https://example.com',
+            'matched-text': 'https://example.com',
+            title: 'My Custom Preview',
+            description: 'With a custom thumbnail',
+            jpegThumbnail: await generateThumbnail('https://example.com/image.jpg')
+        }
+    }
+)
+```
+
+## Socket Config Reference
+
+Relevant socket configuration options:
+
+```typescript
+type SocketConfig = {
+    /** Width of link preview thumbnail (default: 192) */
+    linkPreviewImageThumbnailWidth?: number
+    
+    /** Upload full quality image for link preview (default: false) */
+    generateHighQualityLinkPreview?: boolean
+    
+    /** HTTP request options for link preview fetching */
+    options?: RequestInit
+}
+```
+
+## Related
+
+- [Sending Text](/messages/sending-text) - Basic text message sending
+- [Socket Configuration](/api/socket-config) - All socket options
+- [Message Types](/api/message-types) - Message content types

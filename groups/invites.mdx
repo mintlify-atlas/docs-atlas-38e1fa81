@@ -1,0 +1,228 @@
+---
+title: Group Invites
+description: Generate, revoke, and accept group invitation codes
+---
+
+## Getting Group Invite Code
+
+Retrieve the current invite code for a group.
+
+```typescript
+const code = await sock.groupInviteCode(jid)
+console.log('group code: ' + code)
+
+// Create the full invite link
+const inviteLink = 'https://chat.whatsapp.com/' + code
+```
+
+### Method Signature
+
+```typescript
+groupInviteCode(jid: string): Promise<string>
+```
+
+**Parameters:**
+- `jid` - The group JID
+
+**Returns:** The invite code string (without the URL prefix)
+
+<Note>
+To create a shareable link, prepend `https://chat.whatsapp.com/` to the code.
+</Note>
+
+<Warning>
+You must be a group admin to retrieve the invite code.
+</Warning>
+
+## Revoking Invite Code
+
+Generate a new invite code, invalidating the previous one.
+
+```typescript
+const newCode = await sock.groupRevokeInvite(jid)
+console.log('New group code: ' + newCode)
+```
+
+### Method Signature
+
+```typescript
+groupRevokeInvite(jid: string): Promise<string>
+```
+
+**Parameters:**
+- `jid` - The group JID
+
+**Returns:** The new invite code
+
+<Warning>
+Revoking the invite code will invalidate all previously shared invite links. Anyone with the old link will no longer be able to join.
+</Warning>
+
+## Joining Using Invite Code
+
+Join a group using its invite code.
+
+```typescript
+// Code should not include 'https://chat.whatsapp.com/', only the code
+const code = 'ABCDefgh123456'
+const response = await sock.groupAcceptInvite(code)
+console.log('joined to: ' + response)
+```
+
+### Method Signature
+
+```typescript
+groupAcceptInvite(code: string): Promise<string>
+```
+
+**Parameters:**
+- `code` - The invite code (without the URL prefix)
+
+**Returns:** The JID of the group you joined
+
+<Warning>
+The code must be just the alphanumeric code, not the full URL. Remove `https://chat.whatsapp.com/` before passing it to this method.
+</Warning>
+
+## Getting Group Info by Invite Code
+
+Retrieve group information without joining.
+
+```typescript
+const response = await sock.groupGetInviteInfo(code)
+console.log('group information:', response)
+```
+
+### Method Signature
+
+```typescript
+groupGetInviteInfo(code: string): Promise<GroupMetadata>
+```
+
+**Parameters:**
+- `code` - The invite code (without the URL prefix)
+
+**Returns:** A `GroupMetadata` object containing:
+- `id` - Group JID
+- `subject` - Group name
+- `size` - Number of participants
+- `owner` - Group creator's JID
+- `desc` - Group description
+- Other metadata fields
+
+<Note>
+This is useful for previewing group information before deciding to join.
+</Note>
+
+## Accepting GroupInviteMessage (v4)
+
+Accept a group invitation sent as a message.
+
+```typescript
+// Using message key
+const response = await sock.groupAcceptInviteV4(
+  message.key,
+  message.message.groupInviteMessage
+)
+
+// Using just the sender's JID
+const response = await sock.groupAcceptInviteV4(
+  senderJid,
+  groupInviteMessage
+)
+
+console.log('joined to: ' + response)
+```
+
+### Method Signature
+
+```typescript
+groupAcceptInviteV4(
+  key: string | WAMessageKey,
+  inviteMessage: proto.Message.IGroupInviteMessage
+): Promise<string>
+```
+
+**Parameters:**
+- `key` - Either a full `WAMessageKey` object or just the sender's JID string
+- `inviteMessage` - The `GroupInviteMessage` object from the message
+
+**Returns:** The JID of the group you joined
+
+<Note>
+When you provide the full message key, the method automatically updates the invite message to mark it as expired after joining.
+</Note>
+
+## Revoking a v4 Invite
+
+Revoke a specific invitation you sent to someone.
+
+```typescript
+const result = await sock.groupRevokeInviteV4(groupJid, invitedJid)
+console.log('Invite revoked:', result)
+```
+
+### Method Signature
+
+```typescript
+groupRevokeInviteV4(groupJid: string, invitedJid: string): Promise<boolean>
+```
+
+**Parameters:**
+- `groupJid` - The group JID
+- `invitedJid` - JID of the person whose invite you want to revoke
+
+**Returns:** `true` if successful
+
+<Warning>
+This is different from revoking the entire invite code. This only revokes a specific invitation sent to an individual user.
+</Warning>
+
+## Working with Invite Links
+
+Here's a complete example of working with invite links:
+
+```typescript
+// Get the invite code
+const code = await sock.groupInviteCode(groupJid)
+
+// Create shareable link
+const inviteLink = `https://chat.whatsapp.com/${code}`
+console.log('Share this link:', inviteLink)
+
+// Extract code from a link (if needed)
+const extractCode = (link: string) => {
+  return link.replace('https://chat.whatsapp.com/', '')
+}
+
+// Preview group info before joining
+const extractedCode = extractCode(inviteLink)
+const groupInfo = await sock.groupGetInviteInfo(extractedCode)
+console.log('Group:', groupInfo.subject, 'Members:', groupInfo.size)
+
+// Join the group
+if (groupInfo.size < 200) {
+  const joinedGroupJid = await sock.groupAcceptInvite(extractedCode)
+  console.log('Successfully joined:', joinedGroupJid)
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Validate invite codes">
+    Before attempting to join, use `groupGetInviteInfo()` to verify the group exists and check its details.
+  </Step>
+  
+  <Step title="Handle expired invites">
+    Wrap invite operations in try-catch blocks, as codes can expire or be revoked at any time.
+  </Step>
+  
+  <Step title="Security considerations">
+    Regularly revoke invite codes if they've been shared publicly to prevent unwanted joins.
+  </Step>
+  
+  <Step title="Clean code extraction">
+    Always strip the URL prefix when extracting codes from links before passing them to API methods.
+  </Step>
+</Steps>

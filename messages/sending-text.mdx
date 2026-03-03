@@ -1,0 +1,129 @@
+---
+title: "Sending Text Messages"
+description: "Send text messages with mentions, formatting, and rich context"
+---
+
+## Basic Text Message
+
+Send a simple text message using the `sendMessage` method:
+
+```typescript
+await sock.sendMessage(jid, { text: 'hello world' })
+```
+
+The `jid` is the WhatsApp ID of the recipient. See [WhatsApp IDs](/concepts/whatsapp-ids) for more information.
+
+## Mentioning Users
+
+You can mention users in text messages by including their JID in the `mentions` array:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: '@12345678901',
+        mentions: ['12345678901@s.whatsapp.net']
+    }
+)
+```
+
+<Note>
+The `@number` in the text is optional for display purposes. The `mentions` array is what triggers the actual mention.
+</Note>
+
+## Text with Context Info
+
+Add additional context to your messages using `contextInfo`:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Hello with context',
+        contextInfo: {
+            externalAdReply: {
+                title: 'My Title',
+                body: 'My Body',
+                thumbnailUrl: 'https://example.com/image.jpg',
+                sourceUrl: 'https://example.com'
+            }
+        }
+    }
+)
+```
+
+## Message Options
+
+The `text` content type is defined in `AnyMessageContent`:
+
+```typescript
+type TextMessageContent = {
+    text: string
+    linkPreview?: WAUrlInfo | null
+} & Mentionable & Contextable & Editable
+```
+
+### Available Options
+
+- `mentions`: Array of JIDs to mention
+- `contextInfo`: Additional message context (see `proto.IContextInfo`)
+- `edit`: Message key to edit an existing message
+- `linkPreview`: Custom link preview (see [Link Previews](/messages/link-previews))
+
+## Editing Text Messages
+
+Edit a previously sent text message:
+
+```typescript
+const msg = await sock.sendMessage(jid, { text: 'original text' })
+
+// Edit the message
+await sock.sendMessage(jid, {
+    text: 'updated text goes here',
+    edit: msg.key
+})
+```
+
+<Warning>
+You can only edit messages you sent. The message must exist and not be too old.
+</Warning>
+
+## Common Patterns
+
+### Send and Quote
+
+See [Forwarding & Quoting](/messages/forwarding-quoting) for how to quote messages.
+
+### Send with Link Preview
+
+See [Link Previews](/messages/link-previews) for automatic link preview generation.
+
+### Disappearing Messages
+
+Send text with a disappearing timer:
+
+```typescript
+import { WA_DEFAULT_EPHEMERAL } from '@whiskeysockets/baileys'
+
+await sock.sendMessage(
+    jid,
+    { text: 'This message will disappear' },
+    { ephemeralExpiration: WA_DEFAULT_EPHEMERAL }
+)
+```
+
+## Type Reference
+
+From `src/Types/Message.ts:218-224`:
+
+```typescript
+{
+    text: string
+    linkPreview?: WAUrlInfo | null
+} & Mentionable & Contextable & Editable
+```
+
+Where:
+- `Mentionable` = `{ mentions?: string[] }`
+- `Contextable` = `{ contextInfo?: proto.IContextInfo }`
+- `Editable` = `{ edit?: WAMessageKey }`

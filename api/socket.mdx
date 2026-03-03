@@ -1,0 +1,495 @@
+---
+title: 'WASocket'
+description: 'Main socket interface for WhatsApp Web API connection'
+---
+
+## makeWASocket
+
+The primary function to create a WhatsApp Web socket connection.
+
+```typescript
+function makeWASocket(config: UserFacingSocketConfig): WASocket
+```
+
+<ParamField path="config" type="UserFacingSocketConfig" required>
+  Configuration object for the socket connection. See [Socket Configuration](/api/socket-config) for details.
+</ParamField>
+
+<ResponseField name="WASocket" type="object">
+  Returns a socket instance with all methods and properties for interacting with WhatsApp Web API.
+</ResponseField>
+
+### Example
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+import { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true
+})
+
+sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update
+    if(connection === 'close') {
+        console.log('Connection closed')
+    } else if(connection === 'open') {
+        console.log('Connection opened')
+    }
+})
+
+sock.ev.on('creds.update', saveCreds)
+```
+
+## WASocket Methods
+
+The `WASocket` object returned by `makeWASocket` includes the following categories of methods:
+
+### Core Properties
+
+<ResponseField name="ev" type="BaileysEventEmitter">
+  Event emitter for listening to WhatsApp events. See [Events](/api/events) for available events.
+</ResponseField>
+
+<ResponseField name="user" type="Contact | undefined">
+  Information about the authenticated user.
+</ResponseField>
+
+<ResponseField name="ws" type="WebSocket">
+  The underlying WebSocket connection.
+</ResponseField>
+
+<ResponseField name="authState" type="AuthenticationState">
+  Current authentication state including credentials and keys.
+</ResponseField>
+
+### Messaging Methods
+
+<ResponseField name="sendMessage" type="function">
+  ```typescript
+  sendMessage(
+    jid: string,
+    content: AnyMessageContent,
+    options?: MessageRelayOptions
+  ): Promise<proto.WebMessageInfo>
+  ```
+  
+  Send a message to a chat.
+  
+  <ParamField path="jid" type="string" required>
+    The JID (WhatsApp ID) of the recipient (e.g., "1234567890@s.whatsapp.net" for individual, "1234567890@g.us" for group)
+  </ParamField>
+  
+  <ParamField path="content" type="AnyMessageContent" required>
+    Message content (text, image, video, document, etc.)
+  </ParamField>
+  
+  <ParamField path="options" type="MessageRelayOptions">
+    Additional options for message sending (quoted message, etc.)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="sendReceipt" type="function">
+  ```typescript
+  sendReceipt(
+    jid: string,
+    participant: string | undefined,
+    messageIds: string[],
+    type: MessageReceiptType
+  ): Promise<void>
+  ```
+  
+  Send read/delivery receipts for messages.
+</ResponseField>
+
+<ResponseField name="sendPresenceUpdate" type="function">
+  ```typescript
+  sendPresenceUpdate(type: WAPresence, toJid?: string): Promise<void>
+  ```
+  
+  Update presence status (typing, recording, online, etc.).
+  
+  <ParamField path="type" type="WAPresence" required>
+    Presence type: `'unavailable'` | `'available'` | `'composing'` | `'recording'` | `'paused'`
+  </ParamField>
+  
+  <ParamField path="toJid" type="string">
+    Target JID for the presence update (optional, defaults to general presence)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="readMessages" type="function">
+  ```typescript
+  readMessages(keys: WAMessageKey[]): Promise<void>
+  ```
+  
+  Mark messages as read.
+</ResponseField>
+
+### Group Methods
+
+<ResponseField name="groupCreate" type="function">
+  ```typescript
+  groupCreate(subject: string, participants: string[]): Promise<GroupMetadata>
+  ```
+  
+  Create a new group.
+  
+  <ParamField path="subject" type="string" required>
+    Group name
+  </ParamField>
+  
+  <ParamField path="participants" type="string[]" required>
+    Array of participant JIDs to add to the group
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="groupMetadata" type="function">
+  ```typescript
+  groupMetadata(jid: string): Promise<GroupMetadata>
+  ```
+  
+  Fetch metadata for a group.
+</ResponseField>
+
+<ResponseField name="groupParticipantsUpdate" type="function">
+  ```typescript
+  groupParticipantsUpdate(
+    jid: string,
+    participants: string[],
+    action: ParticipantAction
+  ): Promise<{ status: string; jid: string; content: BinaryNode }[]>
+  ```
+  
+  Add, remove, promote, or demote group participants.
+  
+  <ParamField path="action" type="ParticipantAction" required>
+    Action to perform: `'add'` | `'remove'` | `'promote'` | `'demote'`
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="groupUpdateSubject" type="function">
+  ```typescript
+  groupUpdateSubject(jid: string, subject: string): Promise<void>
+  ```
+  
+  Update group name/subject.
+</ResponseField>
+
+<ResponseField name="groupUpdateDescription" type="function">
+  ```typescript
+  groupUpdateDescription(jid: string, description?: string): Promise<void>
+  ```
+  
+  Update group description. Pass undefined to remove description.
+</ResponseField>
+
+<ResponseField name="groupInviteCode" type="function">
+  ```typescript
+  groupInviteCode(jid: string): Promise<string | undefined>
+  ```
+  
+  Get the group invite code.
+</ResponseField>
+
+<ResponseField name="groupRevokeInvite" type="function">
+  ```typescript
+  groupRevokeInvite(jid: string): Promise<string | undefined>
+  ```
+  
+  Revoke and regenerate the group invite code.
+</ResponseField>
+
+<ResponseField name="groupAcceptInvite" type="function">
+  ```typescript
+  groupAcceptInvite(code: string): Promise<string | undefined>
+  ```
+  
+  Join a group using an invite code.
+</ResponseField>
+
+<ResponseField name="groupLeave" type="function">
+  ```typescript
+  groupLeave(id: string): Promise<void>
+  ```
+  
+  Leave a group.
+</ResponseField>
+
+<ResponseField name="groupToggleEphemeral" type="function">
+  ```typescript
+  groupToggleEphemeral(jid: string, ephemeralExpiration: number): Promise<void>
+  ```
+  
+  Enable or disable disappearing messages. Set to 0 to disable.
+  
+  <ParamField path="ephemeralExpiration" type="number" required>
+    Duration in seconds (0 to disable, or 86400 for 1 day, 604800 for 7 days, 7776000 for 90 days)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="groupSettingUpdate" type="function">
+  ```typescript
+  groupSettingUpdate(
+    jid: string,
+    setting: 'announcement' | 'not_announcement' | 'locked' | 'unlocked'
+  ): Promise<void>
+  ```
+  
+  Update group settings (announcement mode or edit restrictions).
+</ResponseField>
+
+<ResponseField name="groupFetchAllParticipating" type="function">
+  ```typescript
+  groupFetchAllParticipating(): Promise<{ [jid: string]: GroupMetadata }>
+  ```
+  
+  Fetch metadata for all groups the user is participating in.
+</ResponseField>
+
+### Community Methods
+
+<ResponseField name="communityCreate" type="function">
+  ```typescript
+  communityCreate(subject: string, body: string): Promise<GroupMetadata | null>
+  ```
+  
+  Create a new community.
+</ResponseField>
+
+<ResponseField name="communityMetadata" type="function">
+  ```typescript
+  communityMetadata(jid: string): Promise<GroupMetadata>
+  ```
+  
+  Fetch metadata for a community.
+</ResponseField>
+
+<ResponseField name="communityCreateGroup" type="function">
+  ```typescript
+  communityCreateGroup(
+    subject: string,
+    participants: string[],
+    parentCommunityJid: string
+  ): Promise<GroupMetadata | null>
+  ```
+  
+  Create a group within a community.
+</ResponseField>
+
+<ResponseField name="communityLinkGroup" type="function">
+  ```typescript
+  communityLinkGroup(groupJid: string, parentCommunityJid: string): Promise<void>
+  ```
+  
+  Link an existing group to a community.
+</ResponseField>
+
+<ResponseField name="communityUnlinkGroup" type="function">
+  ```typescript
+  communityUnlinkGroup(groupJid: string, parentCommunityJid: string): Promise<void>
+  ```
+  
+  Unlink a group from a community.
+</ResponseField>
+
+<ResponseField name="communityFetchLinkedGroups" type="function">
+  ```typescript
+  communityFetchLinkedGroups(jid: string): Promise<{
+    communityJid: string
+    isCommunity: boolean
+    linkedGroups: Array<{
+      id?: string
+      subject: string
+      creation?: number
+      owner?: string
+      size?: number
+    }>
+  }>
+  ```
+  
+  Fetch all groups linked to a community.
+</ResponseField>
+
+### Business Methods
+
+<ResponseField name="updateBussinesProfile" type="function">
+  ```typescript
+  updateBussinesProfile(args: UpdateBussinesProfileProps): Promise<BinaryNode>
+  ```
+  
+  Update business profile information.
+</ResponseField>
+
+<ResponseField name="getCatalog" type="function">
+  ```typescript
+  getCatalog(options: GetCatalogOptions): Promise<{
+    products: Product[]
+    nextCursor?: string
+  }>
+  ```
+  
+  Get business catalog products.
+</ResponseField>
+
+<ResponseField name="productCreate" type="function">
+  ```typescript
+  productCreate(create: ProductCreate): Promise<Product>
+  ```
+  
+  Create a new product in the business catalog.
+</ResponseField>
+
+<ResponseField name="productUpdate" type="function">
+  ```typescript
+  productUpdate(productId: string, update: ProductUpdate): Promise<Product>
+  ```
+  
+  Update an existing product.
+</ResponseField>
+
+<ResponseField name="productDelete" type="function">
+  ```typescript
+  productDelete(productIds: string[]): Promise<{ deleted: number }>
+  ```
+  
+  Delete products from the catalog.
+</ResponseField>
+
+### Profile & Privacy Methods
+
+<ResponseField name="updateProfilePicture" type="function">
+  ```typescript
+  updateProfilePicture(jid: string, content: WAMediaUpload): Promise<void>
+  ```
+  
+  Update profile picture for user or group.
+</ResponseField>
+
+<ResponseField name="removeProfilePicture" type="function">
+  ```typescript
+  removeProfilePicture(jid: string): Promise<void>
+  ```
+  
+  Remove profile picture.
+</ResponseField>
+
+<ResponseField name="updateProfileStatus" type="function">
+  ```typescript
+  updateProfileStatus(status: string): Promise<void>
+  ```
+  
+  Update status/about text.
+</ResponseField>
+
+<ResponseField name="updateProfileName" type="function">
+  ```typescript
+  updateProfileName(name: string): Promise<void>
+  ```
+  
+  Update profile display name.
+</ResponseField>
+
+<ResponseField name="updateBlockStatus" type="function">
+  ```typescript
+  updateBlockStatus(jid: string, action: 'block' | 'unblock'): Promise<void>
+  ```
+  
+  Block or unblock a user.
+</ResponseField>
+
+<ResponseField name="fetchBlocklist" type="function">
+  ```typescript
+  fetchBlocklist(): Promise<string[]>
+  ```
+  
+  Get list of blocked users.
+</ResponseField>
+
+<ResponseField name="fetchPrivacySettings" type="function">
+  ```typescript
+  fetchPrivacySettings(force?: boolean): Promise<{ [key: string]: string }>
+  ```
+  
+  Fetch privacy settings.
+</ResponseField>
+
+<ResponseField name="updateReadReceiptsPrivacy" type="function">
+  ```typescript
+  updateReadReceiptsPrivacy(value: WAReadReceiptsValue): Promise<void>
+  ```
+  
+  Update read receipts privacy setting.
+</ResponseField>
+
+<ResponseField name="updateOnlinePrivacy" type="function">
+  ```typescript
+  updateOnlinePrivacy(value: WAPrivacyOnlineValue): Promise<void>
+  ```
+  
+  Update online/last seen privacy.
+</ResponseField>
+
+<ResponseField name="updateProfilePicturePrivacy" type="function">
+  ```typescript
+  updateProfilePicturePrivacy(value: WAPrivacyValue): Promise<void>
+  ```
+  
+  Update profile picture privacy.
+</ResponseField>
+
+### Utility Methods
+
+<ResponseField name="query" type="function">
+  ```typescript
+  query(node: BinaryNode, timeoutMs?: number): Promise<BinaryNode>
+  ```
+  
+  Send a raw binary node query and await response.
+</ResponseField>
+
+<ResponseField name="sendNode" type="function">
+  ```typescript
+  sendNode(node: BinaryNode): Promise<void>
+  ```
+  
+  Send a raw binary node without expecting a response.
+</ResponseField>
+
+<ResponseField name="logout" type="function">
+  ```typescript
+  logout(): Promise<void>
+  ```
+  
+  Logout and invalidate the current session.
+</ResponseField>
+
+<ResponseField name="end" type="function">
+  ```typescript
+  end(error?: Error | undefined): void
+  ```
+  
+  Close the WebSocket connection.
+</ResponseField>
+
+<ResponseField name="waitForSocketOpen" type="function">
+  ```typescript
+  waitForSocketOpen(): Promise<void>
+  ```
+  
+  Wait for the WebSocket to be in OPEN state.
+</ResponseField>
+
+<ResponseField name="waitForConnectionUpdate" type="function">
+  ```typescript
+  waitForConnectionUpdate(
+    check: (u: Partial<ConnectionState>) => boolean | undefined,
+    timeoutMs?: number
+  ): Promise<void>
+  ```
+  
+  Wait for a specific connection state update.
+</ResponseField>

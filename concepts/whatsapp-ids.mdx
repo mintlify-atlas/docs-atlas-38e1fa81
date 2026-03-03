@@ -1,0 +1,434 @@
+---
+title: WhatsApp IDs
+description: Understand the JID format and different types of WhatsApp identifiers
+icon: 'hashtag'
+---
+
+WhatsApp uses a specific ID format called JID (Jabber ID) to identify users, groups, broadcast lists, and other entities. Understanding JIDs is essential for sending messages and managing chats.
+
+## JID Format
+
+A JID consists of three parts: `user@server` or `user:device@server`
+
+```typescript
+// Basic format
+[user]@[server]
+
+// With device ID (multi-device)
+[user]:[device]@[server]
+
+// Examples
+1234567890@s.whatsapp.net           // Regular user
+1234567890:0@s.whatsapp.net         // User with device ID
+123456789-987654321@g.us            // Group
+status@broadcast                     // Status/Stories
+```
+
+## JID Types
+
+### Individual Users
+
+Individual user JIDs use the `s.whatsapp.net` server:
+
+```typescript
+// Format: [country code][phone number]@s.whatsapp.net
+const userJid = '1234567890@s.whatsapp.net'
+
+// Send message to user
+await sock.sendMessage(userJid, { text: 'Hello!' })
+```
+
+<Note>
+  User JIDs must include the country code without the `+` symbol. For example, a US number +1 (234) 567-8900 becomes `12345678900@s.whatsapp.net`.
+</Note>
+
+### Groups
+
+Group JIDs use the `g.us` server and follow this format:
+
+```typescript
+// Format: [timestamp]-[random]@g.us
+const groupJid = '123456789-987654321@g.us'
+
+// Send message to group
+await sock.sendMessage(groupJid, { text: 'Hello group!' })
+```
+
+### Broadcast Lists
+
+Broadcast lists use a timestamp-based format:
+
+```typescript
+// Format: [timestamp]@broadcast
+const broadcastJid = '1234567890@broadcast'
+
+// Send to broadcast list
+await sock.sendMessage(broadcastJid, { text: 'Broadcast message' })
+```
+
+### Status/Stories
+
+Status updates use a special broadcast JID:
+
+```typescript
+// Fixed JID for status
+const statusJid = 'status@broadcast'
+
+// Send status update
+await sock.sendMessage(statusJid, {
+    image: { url: './image.jpg' },
+    caption: 'My status update'
+})
+```
+
+### Newsletters
+
+Newsletters (channels) use the `newsletter` server:
+
+```typescript
+// Format: [newsletter_id]@newsletter
+const newsletterJid = '1234567890@newsletter'
+```
+
+### LID (Local Identity)
+
+LID is used for privacy-focused identifiers:
+
+```typescript
+// Format: [lid]@lid
+const lidJid = 'ABC123@lid'
+```
+
+## JID Utilities
+
+Baileys provides utility functions for working with JIDs:
+
+### jidDecode
+
+Parse a JID into its components:
+
+```typescript
+import { jidDecode } from '@whiskeysockets/baileys'
+
+const jid = '1234567890:0@s.whatsapp.net'
+const decoded = jidDecode(jid)
+
+console.log(decoded)
+// {
+//   user: '1234567890',
+//   server: 's.whatsapp.net',
+//   device: 0,
+//   domainType: 0
+// }
+```
+
+### jidEncode
+
+Construct a JID from components:
+
+```typescript
+import { jidEncode } from '@whiskeysockets/baileys'
+
+const jid = jidEncode('1234567890', 's.whatsapp.net', 0)
+console.log(jid) // '1234567890:0@s.whatsapp.net'
+
+// Without device
+const simpleJid = jidEncode('1234567890', 's.whatsapp.net')
+console.log(simpleJid) // '1234567890@s.whatsapp.net'
+```
+
+### Type Checking Functions
+
+Check what type of JID you're working with:
+
+```typescript
+import {
+    isJidGroup,
+    isJidBroadcast,
+    isJidStatusBroadcast,
+    isJidNewsletter,
+    isLidUser,
+    isPnUser,
+    areJidsSameUser
+} from '@whiskeysockets/baileys'
+
+// Check if JID is a group
+if (isJidGroup('123456789-987654321@g.us')) {
+    console.log('This is a group')
+}
+
+// Check if JID is a broadcast
+if (isJidBroadcast('1234567890@broadcast')) {
+    console.log('This is a broadcast list')
+}
+
+// Check if JID is status broadcast
+if (isJidStatusBroadcast('status@broadcast')) {
+    console.log('This is the status broadcast')
+}
+
+// Check if JID is a newsletter
+if (isJidNewsletter('1234567890@newsletter')) {
+    console.log('This is a newsletter')
+}
+
+// Check if JID is a LID user
+if (isLidUser('ABC123@lid')) {
+    console.log('This is a LID user')
+}
+
+// Check if JID is a regular user
+if (isPnUser('1234567890@s.whatsapp.net')) {
+    console.log('This is a regular user')
+}
+
+// Compare if two JIDs belong to same user
+if (areJidsSameUser('1234567890:0@s.whatsapp.net', '1234567890:1@s.whatsapp.net')) {
+    console.log('Same user, different devices')
+}
+```
+
+## Multi-Device JIDs
+
+WhatsApp's multi-device feature uses device IDs in JIDs:
+
+```typescript
+// Main device (phone)
+const mainDevice = '1234567890:0@s.whatsapp.net'
+
+// Linked device 1 (web/desktop)
+const linkedDevice1 = '1234567890:1@s.whatsapp.net'
+
+// Linked device 2
+const linkedDevice2 = '1234567890:2@s.whatsapp.net'
+```
+
+<Note>
+  Device ID `0` always refers to the main phone. Linked devices start from `1`.
+</Note>
+
+## JID Server Types
+
+Different servers indicate different entity types:
+
+| Server | Type | Example |
+|--------|------|----------|
+| `s.whatsapp.net` | Individual user | `1234567890@s.whatsapp.net` |
+| `g.us` | Group | `123456789-987654321@g.us` |
+| `broadcast` | Broadcast list / Status | `1234567890@broadcast` |
+| `newsletter` | Newsletter/Channel | `1234567890@newsletter` |
+| `lid` | Local identity (LID) | `ABC123@lid` |
+| `c.us` | User (alternative) | `1234567890@c.us` |
+| `call` | Call-related | Used internally |
+
+## Extracting Phone Numbers
+
+Extract phone number from a user JID:
+
+```typescript
+import { jidDecode } from '@whiskeysockets/baileys'
+
+function getPhoneNumber(jid: string): string | undefined {
+    const decoded = jidDecode(jid)
+    if (decoded?.server === 's.whatsapp.net' || decoded?.server === 'c.us') {
+        return decoded.user
+    }
+    return undefined
+}
+
+const phone = getPhoneNumber('1234567890@s.whatsapp.net')
+console.log(phone) // '1234567890'
+```
+
+## Normalizing JIDs
+
+Normalize JIDs for consistent comparison:
+
+```typescript
+import { jidNormalizedUser } from '@whiskeysockets/baileys'
+
+// Converts c.us to s.whatsapp.net
+const normalized = jidNormalizedUser('1234567890@c.us')
+console.log(normalized) // '1234567890@s.whatsapp.net'
+```
+
+## Message Keys
+
+Every message has a key that includes JID information:
+
+```typescript
+import { WAMessageKey } from '@whiskeysockets/baileys'
+
+interface WAMessageKey {
+    remoteJid: string    // Who the chat is with
+    fromMe: boolean      // Did I send this message?
+    id: string           // Unique message ID
+    participant?: string // Who sent it (in groups)
+}
+
+// Example: Message in a group
+const messageKey: WAMessageKey = {
+    remoteJid: '123456789-987654321@g.us',     // Group JID
+    fromMe: false,
+    id: 'ABC123',
+    participant: '1234567890@s.whatsapp.net'   // Who sent it
+}
+
+// Example: Direct message
+const dmKey: WAMessageKey = {
+    remoteJid: '1234567890@s.whatsapp.net',
+    fromMe: true,
+    id: 'XYZ789'
+    // No participant in direct messages
+}
+```
+
+## Group Participant JIDs
+
+In group messages, distinguish between chat JID and participant JID:
+
+```typescript
+sock.ev.on('messages.upsert', ({ messages }) => {
+    for (const msg of messages) {
+        const chatJid = msg.key.remoteJid        // Group JID
+        const senderJid = msg.key.participant    // Who sent it
+        
+        if (isJidGroup(chatJid)) {
+            console.log(`Message in group ${chatJid}`)
+            console.log(`Sent by ${senderJid}`)
+        }
+    }
+})
+```
+
+## Checking if JID Exists
+
+Verify if a phone number has WhatsApp:
+
+```typescript
+// Check if number exists on WhatsApp
+const phoneNumber = '1234567890'
+const jid = `${phoneNumber}@s.whatsapp.net`
+
+const [result] = await sock.onWhatsApp(jid)
+if (result?.exists) {
+    console.log(`JID ${result.jid} exists on WhatsApp`)
+} else {
+    console.log('Number not on WhatsApp')
+}
+```
+
+## Special JIDs
+
+Baileys defines constants for special JIDs:
+
+```typescript
+import {
+    S_WHATSAPP_NET,
+    OFFICIAL_BIZ_JID,
+    SERVER_JID,
+    PSA_WID,
+    STORIES_JID,
+    META_AI_JID
+} from '@whiskeysockets/baileys'
+
+console.log(S_WHATSAPP_NET)      // '@s.whatsapp.net'
+console.log(OFFICIAL_BIZ_JID)    // '16505361212@c.us' (WhatsApp Business)
+console.log(STORIES_JID)         // 'status@broadcast'
+console.log(META_AI_JID)         // '13135550002@c.us' (Meta AI)
+```
+
+## JID Best Practices
+
+<Steps>
+  <Step title="Always validate JIDs">
+    Check if a JID is valid before using it:
+
+    ```typescript
+    import { jidDecode } from '@whiskeysockets/baileys'
+
+    function isValidJid(jid: string): boolean {
+        return jidDecode(jid) !== undefined
+    }
+    ```
+  </Step>
+
+  <Step title="Use type checking functions">
+    Don't parse JIDs manually - use provided utilities:
+
+    ```typescript
+    // Good
+    if (isJidGroup(jid)) {
+        // Handle group
+    }
+
+    // Bad
+    if (jid.endsWith('@g.us')) {
+        // Don't do this
+    }
+    ```
+  </Step>
+
+  <Step title="Store JIDs consistently">
+    Always store JIDs in their canonical form:
+
+    ```typescript
+    import { jidNormalizedUser } from '@whiskeysockets/baileys'
+
+    const normalizedJid = jidNormalizedUser(jid)
+    await db.saveContact(normalizedJid)
+    ```
+  </Step>
+</Steps>
+
+## Domain Types
+
+JIDs can have different domain types for privacy:
+
+```typescript
+import { WAJIDDomains } from '@whiskeysockets/baileys'
+
+enum WAJIDDomains {
+    WHATSAPP = 0,      // Regular WhatsApp
+    LID = 1,           // Local identity
+    HOSTED = 128,      // Hosted account
+    HOSTED_LID = 129   // Hosted LID
+}
+```
+
+## Complete JID Example
+
+```typescript
+import {
+    jidDecode,
+    jidEncode,
+    isJidGroup,
+    isJidBroadcast,
+    areJidsSameUser
+} from '@whiskeysockets/baileys'
+
+function analyzeJid(jid: string) {
+    const decoded = jidDecode(jid)
+    
+    if (!decoded) {
+        console.log('Invalid JID')
+        return
+    }
+    
+    console.log('User:', decoded.user)
+    console.log('Server:', decoded.server)
+    console.log('Device:', decoded.device)
+    
+    if (isJidGroup(jid)) {
+        console.log('Type: Group')
+    } else if (isJidBroadcast(jid)) {
+        console.log('Type: Broadcast')
+    } else {
+        console.log('Type: Individual')
+    }
+}
+
+analyzeJid('1234567890:0@s.whatsapp.net')
+analyzeJid('123456789-987654321@g.us')
+analyzeJid('status@broadcast')
+```

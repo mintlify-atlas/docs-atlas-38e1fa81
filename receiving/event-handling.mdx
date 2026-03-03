@@ -1,0 +1,211 @@
+---
+title: 'Event Handling'
+description: 'Listen to and handle events from WhatsApp Web API'
+---
+
+Baileys uses the EventEmitter pattern to notify you about incoming messages, connection changes, and credential updates. You listen to these events to build your bot's functionality.
+
+## Key Events
+
+You can find all available events in the [BaileysEventMap type definition](https://baileys.whiskeysockets.io/types/BaileysEventMap.html).
+
+### messages.upsert
+
+Fired when new messages arrive or are sent from another device.
+
+```ts
+sock.ev.on('messages.upsert', ({ messages, type }) => {
+  console.log('got messages', messages)
+  
+  for (const msg of messages) {
+    if (!msg.message) continue
+    
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text
+    console.log('Message text:', text)
+    
+    // Reply to the message
+    if (!msg.key.fromMe) {
+      await sock.sendMessage(msg.key.remoteJid!, { text: 'Hello!' })
+    }
+  }
+})
+```
+
+<Note>
+  The `type` field indicates whether this is a `'notify'` (new message) or `'append'` (history sync) event.
+</Note>
+
+### connection.update
+
+Handles connection state changes, QR code generation, and disconnections.
+
+```ts
+sock.ev.on('connection.update', (update) => {
+  const { connection, lastDisconnect, qr } = update
+  
+  if (connection === 'close') {
+    const shouldReconnect = (lastDisconnect.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
+    console.log('connection closed due to', lastDisconnect.error, ', reconnecting', shouldReconnect)
+    
+    if (shouldReconnect) {
+      connectToWhatsApp()
+    }
+  } else if (connection === 'open') {
+    console.log('opened connection')
+  }
+  
+  if (qr) {
+    console.log('QR Code:', qr)
+  }
+})
+```
+
+<Warning>
+  Always check the disconnect reason before reconnecting. If the status code is `DisconnectReason.loggedOut`, do not reconnect automatically.
+</Warning>
+
+### creds.update
+
+Fired when authentication credentials are updated. You must save these credentials to maintain your session.
+
+```ts
+import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({ auth: state })
+
+sock.ev.on('creds.update', saveCreds)
+```
+
+<Note>
+  Credentials update whenever signal sessions change (on send/receive). Not saving them will cause message delivery failures.
+</Note>
+
+## Processing Events Efficiently
+
+You can use `sock.ev.process()` to batch-process multiple events at once:
+
+```ts
+sock.ev.process(async (events) => {
+  if (events['connection.update']) {
+    const update = events['connection.update']
+    console.log('connection update', update)
+  }
+  
+  if (events['creds.update']) {
+    await saveCreds()
+  }
+  
+  if (events['messages.upsert']) {
+    const { messages } = events['messages.upsert']
+    for (const msg of messages) {
+      console.log('new message', msg)
+    }
+  }
+})
+```
+
+## Other Common Events
+
+### messages.update
+
+Fired when messages are edited, deleted, or status changes (delivered, read).
+
+```ts
+sock.ev.on('messages.update', (updates) => {
+  for (const { key, update } of updates) {
+    console.log('message updated:', key.id, update)
+  }
+})
+```
+
+### chats.update
+
+Fired when chat metadata changes (unread count, last message timestamp).
+
+```ts
+sock.ev.on('chats.update', (updates) => {
+  console.log('chats updated', updates)
+})
+```
+
+### contacts.update
+
+Fired when contact information changes (profile picture, name).
+
+```ts
+sock.ev.on('contacts.update', async (updates) => {
+  for (const contact of updates) {
+    if (typeof contact.imgUrl !== 'undefined') {
+      const newUrl = contact.imgUrl === null
+        ? null
+        : await sock.profilePictureUrl(contact.id!).catch(() => null)
+      console.log('contact has a new profile pic:', newUrl)
+    }
+  }
+})
+```
+
+### presence.update
+
+Fired when a contact's presence changes (online, typing, recording).
+
+```ts
+sock.ev.on('presence.update', (update) => {
+  console.log('presence update:', update)
+})
+
+// Subscribe to presence updates for a specific chat
+await sock.presenceSubscribe(jid)
+```
+
+## Complete Example
+
+<Steps>
+  <Step title="Set up authentication">
+    ```ts
+    import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys'
+    import { Boom } from '@hapi/boom'
+    
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+    ```
+  </Step>
+  
+  <Step title="Create the socket">
+    ```ts
+    const sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: true
+    })
+    ```
+  </Step>
+  
+  <Step title="Handle events">
+    ```ts
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect } = update
+      if (connection === 'close') {
+        const shouldReconnect = (lastDisconnect.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
+        if (shouldReconnect) {
+          connectToWhatsApp()
+        }
+      } else if (connection === 'open') {
+        console.log('opened connection')
+      }
+    })
+    
+    sock.ev.on('messages.upsert', async ({ messages }) => {
+      for (const msg of messages) {
+        console.log('received message:', msg)
+        
+        if (!msg.key.fromMe && msg.message) {
+          await sock.sendMessage(msg.key.remoteJid!, { text: 'Hello!' })
+        }
+      }
+    })
+    
+    sock.ev.on('creds.update', saveCreds)
+    ```
+  </Step>
+</Steps>

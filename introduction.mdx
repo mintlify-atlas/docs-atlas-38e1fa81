@@ -1,0 +1,106 @@
+---
+title: Introduction
+description: Welcome to Baileys - A powerful WebSockets-based TypeScript library for WhatsApp Web API
+---
+
+# Welcome to Baileys
+
+Baileys is a lightweight, efficient TypeScript library that lets you interact with WhatsApp Web through WebSockets - no Selenium, no Chromium, and no heavy browser automation.
+
+## Why choose Baileys?
+
+Baileys directly interfaces with WhatsApp Web using WebSockets, making it significantly more efficient than browser-based automation tools.
+
+<CardGroup cols={2}>
+  <Card title="Memory efficient" icon="microchip">
+    No Selenium or Chromium means you save approximately 500MB of RAM per instance
+  </Card>
+  <Card title="Multi-device support" icon="mobile">
+    Works seamlessly with WhatsApp's multi-device architecture
+  </Card>
+  <Card title="TypeScript first" icon="code">
+    Fully typed API with excellent IntelliSense support for better developer experience
+  </Card>
+  <Card title="Production ready" icon="rocket">
+    Battle-tested library used by developers worldwide with active community support
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Authentication methods
+Connect to WhatsApp using either QR code scanning or pairing codes - both methods support WhatsApp's multi-device functionality.
+
+### Comprehensive messaging
+Send and receive all message types including text, media (images, videos, audio), documents, locations, contacts, polls, reactions, and more.
+
+### Full API coverage
+Manage groups, handle privacy settings, work with broadcast lists, modify chats, query user information, and access nearly every feature available in WhatsApp Web.
+
+### Event-driven architecture
+Use EventEmitter patterns to handle messages, connection updates, presence changes, and all WhatsApp events with strongly-typed event handlers.
+
+## Quick example
+
+Here's what it takes to connect and send a message:
+
+```typescript
+import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({
+  auth: state,
+  printQRInTerminal: true
+})
+
+sock.ev.on('creds.update', saveCreds)
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  const message = messages[0]
+  if (!message.key.fromMe) {
+    await sock.sendMessage(message.key.remoteJid!, { 
+      text: 'Hello! Message received.' 
+    })
+  }
+})
+```
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Baileys using npm, yarn, or pnpm
+  </Card>
+  <Card title="Quick start" icon="bolt" href="/quickstart">
+    Get your first WhatsApp bot running in minutes
+  </Card>
+  <Card title="Migration guide" icon="arrow-right-arrow-left" href="/migration">
+    Upgrading from an older version? Check the migration guide
+  </Card>
+  <Card title="API reference" icon="book" href="/api/socket">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Community and support
+
+<Note>
+Join the Discord community at [discord.gg/WeJM5FP9GG](https://discord.gg/WeJM5FP9GG) for help, discussions, and updates.
+</Note>
+
+### Credits
+
+Baileys builds upon the work of several researchers and developers:
+
+- [@pokearaujo](https://github.com/pokearaujo/multidevice) for documenting WhatsApp Multi-Device
+- [@Sigalor](https://github.com/sigalor/whatsapp-web-reveng) for WhatsApp Web reverse engineering
+- [@Rhymen](https://github.com/Rhymen/go-whatsapp/) for the Go implementation
+
+## Important disclaimer
+
+<Warning>
+This project is not affiliated with WhatsApp or Meta. Use responsibly and in accordance with WhatsApp's Terms of Service. The maintainers do not condone spam, bulk messaging, or any practices that violate WhatsApp's policies.
+</Warning>
+
+Baileys is licensed under MIT. See the [GitHub repository](https://github.com/WhiskeySockets/Baileys) for more information.

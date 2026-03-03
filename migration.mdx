@@ -1,0 +1,397 @@
+---
+title: Migration guide
+description: Migrate your code to Baileys 7.0.0 and handle breaking changes
+---
+
+# Migration guide
+
+Baileys 7.0.0 introduces several breaking changes that improve performance, security, and alignment with WhatsApp's latest protocols. This guide helps you migrate from previous versions.
+
+<Warning>
+**Breaking changes were introduced in version 7.0.0.** If you're upgrading from 6.x or earlier, carefully review this guide before updating.
+</Warning>
+
+## Official migration resource
+
+For the most up-to-date and detailed migration information, visit the official migration guide:
+
+<Card title="Official Migration Guide" icon="arrow-right" href="https://whiskey.so/migrate-latest">
+  Complete migration documentation from the Baileys maintainers
+</Card>
+
+## Overview of changes
+
+Version 7.0.0 includes changes across several areas:
+
+- **Authentication system updates**
+- **Message handling improvements**
+- **Socket configuration changes**
+- **Event system refinements**
+- **API method signatures**
+- **TypeScript type updates**
+
+## Update your dependencies
+
+First, update Baileys and review your `package.json`:
+
+<CodeGroup>
+```bash npm
+npm install @whiskeysockets/baileys@latest
+```
+
+```bash yarn
+yarn add @whiskeysockets/baileys@latest
+```
+
+```bash pnpm
+pnpm add @whiskeysockets/baileys@latest
+```
+</CodeGroup>
+
+### Update Node.js version
+
+<Warning>
+Baileys 7.0.0 requires **Node.js 20.0.0 or higher**. Earlier versions are no longer supported.
+</Warning>
+
+```json package.json
+{
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+```
+
+## Authentication changes
+
+### Multi-file auth state
+
+The `useMultiFileAuthState` function remains the recommended approach, but internal handling has improved:
+
+```typescript
+import { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({
+  auth: state
+})
+
+// IMPORTANT: Always save credentials when they update
+sock.ev.on('creds.update', saveCreds)
+```
+
+<Tip>
+If you were using a custom auth state implementation, ensure your `keys.set()` method is called correctly when credentials update. See the `useMultiFileAuthState` implementation for reference.
+</Tip>
+
+### Cacheable signal key store
+
+For better performance, wrap your auth keys with `makeCacheableSignalKeyStore`:
+
+```typescript
+import { makeCacheableSignalKeyStore, useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({
+  auth: {
+    creds: state.creds,
+    keys: makeCacheableSignalKeyStore(state.keys, logger)
+  }
+})
+```
+
+This caching layer significantly improves message send/receive performance.
+
+## Socket configuration
+
+### Browser configuration
+
+If you're customizing the browser identity, import from the correct location:
+
+```typescript
+// Old (6.x)
+import { Browsers } from '@whiskeysockets/baileys'
+
+// New (7.0.0)
+import makeWASocket, { Browsers } from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+  browser: Browsers.macOS('My App')
+})
+```
+
+### Version fetching
+
+Fetch the latest WhatsApp Web version explicitly:
+
+```typescript
+import { fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
+
+const { version, isLatest } = await fetchLatestBaileysVersion()
+
+const sock = makeWASocket({
+  version
+})
+```
+
+## Message handling
+
+### Message content types
+
+Type definitions for message content have been refined. Update your type annotations:
+
+```typescript
+// Old
+import { WAMessage, WAMessageContent } from '@whiskeysockets/baileys'
+
+// New - More specific types
+import { 
+  WAMessage, 
+  WAMessageContent,
+  AnyMessageContent,
+  proto 
+} from '@whiskeysockets/baileys'
+```
+
+### Get message for retries
+
+The `getMessage` callback is now required for reliable message handling:
+
+```typescript
+const sock = makeWASocket({
+  getMessage: async (key) => {
+    // Return the message from your store
+    return await getMessageFromYourStore(key)
+  }
+})
+```
+
+<Note>
+Without implementing `getMessage`, you may experience issues with message retries, poll vote decryption, and quoted message handling.
+</Note>
+
+## Event handling
+
+### Event processing
+
+The recommended pattern now uses `sock.ev.process()` for batch event handling:
+
+```typescript
+// Recommended (7.0.0)
+sock.ev.process(async (events) => {
+  if (events['connection.update']) {
+    // Handle connection update
+  }
+  
+  if (events['messages.upsert']) {
+    // Handle messages
+  }
+  
+  if (events['creds.update']) {
+    await saveCreds()
+  }
+})
+
+// Still supported (individual listeners)
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  // Handle messages
+})
+```
+
+The `process` method is more efficient when handling multiple events simultaneously.
+
+### Message upsert changes
+
+```typescript
+sock.ev.on('messages.upsert', async ({ messages, type }) => {
+  // Always iterate through messages array
+  for (const message of messages) {
+    // Process message
+  }
+})
+```
+
+<Warning>
+Always use a loop when processing `messages.upsert`. The array can contain multiple messages, and processing only `messages[0]` may cause you to miss messages.
+</Warning>
+
+## Utility function changes
+
+### Content type detection
+
+```typescript
+import { getContentType } from '@whiskeysockets/baileys'
+
+const messageType = getContentType(message.message)
+// Returns: 'conversation' | 'imageMessage' | 'videoMessage' | etc.
+```
+
+### Media downloads
+
+```typescript
+import { downloadMediaMessage } from '@whiskeysockets/baileys'
+
+const buffer = await downloadMediaMessage(
+  message,
+  'buffer',
+  {},
+  {
+    logger,
+    reuploadRequest: sock.updateMediaMessage
+  }
+)
+```
+
+## Type imports
+
+Many types have been reorganized. Update your imports:
+
+```typescript
+// Common types
+import { 
+  WASocket,
+  BaileysEventMap,
+  ConnectionState,
+  WAMessage,
+  WAMessageKey,
+  AnyMessageContent,
+  MessageUpsertType,
+  proto
+} from '@whiskeysockets/baileys'
+```
+
+## Group methods
+
+Group management method signatures remain largely the same, but return types may differ:
+
+```typescript
+// Returns string (group ID)
+const group = await sock.groupCreate('Group Name', [
+  '1234567890@s.whatsapp.net'
+])
+
+console.log('Created group:', group.id)
+```
+
+## Store implementation
+
+If you're using `makeInMemoryStore`, the API remains compatible:
+
+```typescript
+import { makeInMemoryStore } from '@whiskeysockets/baileys'
+
+const store = makeInMemoryStore({})
+store.readFromFile('./baileys_store.json')
+
+setInterval(() => {
+  store.writeToFile('./baileys_store.json')
+}, 10_000)
+
+const sock = makeWASocket({ /* ... */ })
+store.bind(sock.ev)
+```
+
+<Tip>
+For production applications, implement a custom store using a database instead of the in-memory store to avoid RAM issues with large chat histories.
+</Tip>
+
+## Testing your migration
+
+After updating your code:
+
+<Steps>
+  <Step title="Update dependencies">
+    Ensure all packages are at compatible versions:
+    
+    ```bash
+    npm update
+    ```
+  </Step>
+
+  <Step title="Fix TypeScript errors">
+    Compile your TypeScript code and address any type errors:
+    
+    ```bash
+    npx tsc --noEmit
+    ```
+  </Step>
+
+  <Step title="Test authentication">
+    Verify that your bot can connect and authenticate successfully.
+  </Step>
+
+  <Step title="Test message handling">
+    Send various message types and verify they're received and processed correctly.
+  </Step>
+
+  <Step title="Monitor for issues">
+    Run your application with debug logging enabled:
+    
+    ```typescript
+    import P from 'pino'
+
+    const sock = makeWASocket({
+      logger: P({ level: 'debug' })
+    })
+    ```
+  </Step>
+</Steps>
+
+## Getting help
+
+If you encounter issues during migration:
+
+1. **Check the official migration guide**: [whiskey.so/migrate-latest](https://whiskey.so/migrate-latest)
+2. **Review the example code**: Check [Example/example.ts](https://github.com/WhiskeySockets/Baileys/blob/master/Example/example.ts) in the repository
+3. **Join the Discord community**: Get help at [discord.gg/WeJM5FP9GG](https://discord.gg/WeJM5FP9GG)
+4. **Search existing issues**: Check [GitHub Issues](https://github.com/WhiskeySockets/Baileys/issues) for similar problems
+
+## Common migration errors
+
+### "Cannot find module" errors
+
+Ensure you're importing from the correct package:
+
+```typescript
+// Correct
+import makeWASocket from '@whiskeysockets/baileys'
+
+// Incorrect
+import makeWASocket from 'baileys'
+```
+
+### Authentication loop
+
+If you're constantly re-authenticating:
+
+```typescript
+// Ensure you're saving credentials
+sock.ev.on('creds.update', saveCreds)
+
+// And that saveCreds actually writes to disk/database
+```
+
+### Messages not sending
+
+Implement the `getMessage` callback:
+
+```typescript
+const sock = makeWASocket({
+  getMessage: async (key) => {
+    return await yourStore.loadMessage(key)
+  }
+})
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/api/socket-config">
+    Explore all socket configuration options
+  </Card>
+  <Card title="Core concepts" icon="star" href="/concepts/connection">
+    Learn production-ready patterns and best practices
+  </Card>
+</CardGroup>

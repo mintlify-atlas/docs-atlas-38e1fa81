@@ -1,0 +1,294 @@
+---
+title: "Reactions & Polls"
+description: "React to messages and create interactive polls"
+---
+
+## Reaction Messages
+
+React to any message using emojis:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        react: {
+            text: '💖',
+            key: message.key
+        }
+    }
+)
+```
+
+### Remove Reaction
+
+Remove your reaction by sending an empty string:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        react: {
+            text: '', // empty string removes reaction
+            key: message.key
+        }
+    }
+)
+```
+
+### Getting Message Key
+
+You need the message key to react. Get it from:
+
+1. **When sending**: The returned message object
+   ```typescript
+   const msg = await sock.sendMessage(jid, { text: 'hello' })
+   const messageKey = msg.key
+   ```
+
+2. **When receiving**: From the message event
+   ```typescript
+   sock.ev.on('messages.upsert', ({ messages }) => {
+       for (const m of messages) {
+           const messageKey = m.key
+       }
+   })
+   ```
+
+3. **From store**: If you implement a data store
+   ```typescript
+   const message = await getMessageFromStore(jid, messageId)
+   const messageKey = message.key
+   ```
+
+### Type Signature
+
+From `proto.Message.IReactionMessage`:
+
+```typescript
+{
+    react: {
+        text: string // emoji or empty string to remove
+        key: WAMessageKey // key of message to react to
+    }
+}
+```
+
+See `WAMessageKey` type in the [Message Types](/api/message-types) reference.
+
+## Poll Messages
+
+Create interactive polls with multiple options:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        poll: {
+            name: 'Favorite Programming Language?',
+            values: ['JavaScript', 'TypeScript', 'Python', 'Go', 'Rust'],
+            selectableCount: 1
+        }
+    }
+)
+```
+
+### Multiple Selection Polls
+
+Allow users to select multiple options:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        poll: {
+            name: 'Which features do you want?',
+            values: ['Dark Mode', 'Notifications', 'Export', 'Search'],
+            selectableCount: 3 // users can select up to 3 options
+        }
+    }
+)
+```
+
+### Announcement Group Polls
+
+Create polls where only admins can vote:
+
+```typescript
+await sock.sendMessage(
+    groupJid,
+    {
+        poll: {
+            name: 'Admin Poll',
+            values: ['Option 1', 'Option 2'],
+            selectableCount: 1,
+            toAnnouncementGroup: true
+        }
+    }
+)
+```
+
+### Poll Options
+
+From `src/Types/Message.ts:133-140`:
+
+```typescript
+export type PollMessageOptions = {
+    name: string // poll question
+    selectableCount?: number // max selections (default: 1)
+    values: string[] // poll options
+    messageSecret?: Uint8Array // 32-byte secret for encryption
+    toAnnouncementGroup?: boolean // admin-only voting
+}
+```
+
+## Decrypting Poll Votes
+
+Poll votes are encrypted and received via the `messages.update` event:
+
+```typescript
+sock.ev.on('messages.update', async (events) => {
+    for (const { key, update } of events) {
+        if (update.pollUpdates) {
+            // Get the original poll creation message
+            const pollCreation = await getMessage(key)
+            
+            if (pollCreation) {
+                const votes = getAggregateVotesInPollMessage({
+                    message: pollCreation,
+                    pollUpdates: update.pollUpdates
+                })
+                
+                console.log('Poll votes:', votes)
+            }
+        }
+    }
+})
+```
+
+### Setting Up getMessage
+
+To decrypt poll votes, you need to implement `getMessage` in your socket config:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+    getMessage: async (key) => {
+        // Return the message from your store
+        return await getMessageFromStore(key)
+    }
+})
+```
+
+<Warning>
+Without implementing `getMessage`, you won't be able to decrypt poll votes.
+</Warning>
+
+### Vote Aggregation
+
+The `getAggregateVotesInPollMessage` function returns vote counts:
+
+```typescript
+import { getAggregateVotesInPollMessage } from '@whiskeysockets/baileys'
+
+const aggregation = getAggregateVotesInPollMessage({
+    message: pollCreation,
+    pollUpdates: update.pollUpdates
+})
+
+// Example output:
+// {
+//   "JavaScript": { voters: ['1234@s.whatsapp.net'], count: 1 },
+//   "TypeScript": { voters: ['5678@s.whatsapp.net', '9012@s.whatsapp.net'], count: 2 }
+// }
+```
+
+## Complete Example
+
+Here's a complete example of creating a poll and tracking votes:
+
+```typescript
+import makeWASocket, { 
+    DisconnectReason, 
+    useMultiFileAuthState,
+    getAggregateVotesInPollMessage 
+} from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth')
+
+// In-memory message store (use database in production)
+const messageStore = new Map()
+
+const sock = makeWASocket({
+    auth: state,
+    getMessage: async (key) => {
+        const id = key.remoteJid + ':' + key.id
+        return messageStore.get(id)
+    }
+})
+
+sock.ev.on('creds.update', saveCreds)
+
+// Store sent messages
+sock.ev.on('messages.upsert', ({ messages }) => {
+    for (const msg of messages) {
+        const id = msg.key.remoteJid + ':' + msg.key.id
+        messageStore.set(id, msg)
+    }
+})
+
+// Listen for poll votes
+sock.ev.on('messages.update', async (events) => {
+    for (const { key, update } of events) {
+        if (update.pollUpdates) {
+            const id = key.remoteJid + ':' + key.id
+            const pollCreation = messageStore.get(id)
+            
+            if (pollCreation) {
+                const votes = getAggregateVotesInPollMessage({
+                    message: pollCreation,
+                    pollUpdates: update.pollUpdates
+                })
+                
+                console.log('Poll results:', votes)
+            }
+        }
+    }
+})
+
+// Send a poll
+await sock.sendMessage(
+    jid,
+    {
+        poll: {
+            name: 'Best JavaScript framework?',
+            values: ['React', 'Vue', 'Angular', 'Svelte'],
+            selectableCount: 1
+        }
+    }
+)
+```
+
+## Polls with Mentions
+
+You can mention users in poll questions:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        poll: {
+            name: 'Hey @12345678901, what do you think?',
+            values: ['Yes', 'No', 'Maybe'],
+            selectableCount: 1
+        },
+        mentions: ['12345678901@s.whatsapp.net']
+    }
+)
+```
+
+## Related
+
+- [Pin Messages](#pin-messages) - Pin important messages in chats
+- [Message Events](/api/events) - Handle incoming messages and updates
+- [Data Store](/concepts/store) - Implement message storage for poll decryption

@@ -1,0 +1,333 @@
+---
+title: Authentication
+description: Understand how to save and restore WhatsApp authentication sessions
+icon: 'key'
+---
+
+Baileys uses WhatsApp's multi-device authentication system. Your authentication state includes credentials and encryption keys that must be persisted between sessions.
+
+## Authentication State
+
+The authentication state consists of two parts:
+
+1. **Credentials (`creds`)** - Account registration info, identity keys, device info
+2. **Signal Keys (`keys`)** - Encryption keys for Signal protocol sessions
+
+```typescript
+interface AuthenticationState {
+    creds: AuthenticationCreds
+    keys: SignalKeyStore
+}
+```
+
+## Using Multi-File Auth State
+
+Baileys provides `useMultiFileAuthState` to store authentication in a folder structure:
+
+```typescript
+import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({ 
+    auth: state 
+})
+
+// Save credentials whenever they update
+sock.ev.on('creds.update', saveCreds)
+```
+
+### How It Works
+
+<Steps>
+  <Step title="Initial setup">
+    On first run, `useMultiFileAuthState` creates the folder and initializes empty credentials.
+
+    ```typescript
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+    // Creates folder: auth_info_baileys/
+    ```
+  </Step>
+
+  <Step title="Authentication">
+    When you connect, WhatsApp sends credentials after you scan the QR code or enter pairing code.
+
+    ```typescript
+    const sock = makeWASocket({ auth: state })
+    // QR code appears, user scans it
+    // Credentials are automatically saved
+    ```
+  </Step>
+
+  <Step title="Save on update">
+    The `creds.update` event fires whenever credentials change.
+
+    ```typescript
+    sock.ev.on('creds.update', saveCreds)
+    // Automatically saves to: auth_info_baileys/creds.json
+    ```
+  </Step>
+
+  <Step title="Restore session">
+    On subsequent runs, credentials are loaded automatically.
+
+    ```typescript
+    const { state } = await useMultiFileAuthState('auth_info_baileys')
+    const sock = makeWASocket({ auth: state })
+    // Connects without QR code!
+    ```
+  </Step>
+</Steps>
+
+## File Structure
+
+The `useMultiFileAuthState` function creates the following structure:
+
+```
+auth_info_baileys/
+├── creds.json                          # Main credentials
+├── app-state-sync-key-{id}.json       # App state keys
+├── sender-key-{id}.json                # Group encryption keys
+├── session-{id}.json                   # Signal protocol sessions
+└── pre-key-{id}.json                   # Pre-keys for new sessions
+```
+
+<Warning>
+  Never commit authentication files to version control. Add your auth folder to `.gitignore`.
+</Warning>
+
+## Signal Key Management
+
+WhatsApp uses the Signal protocol for end-to-end encryption. Keys are automatically managed:
+
+```typescript
+interface SignalKeyStore {
+    get: (type: string, ids: string[]) => Promise<Record<string, any>>
+    set: (data: any) => Promise<void>
+}
+```
+
+### Key Types
+
+- **Pre-keys** - Used to establish new sessions
+- **Session keys** - Active encryption sessions with contacts
+- **Sender keys** - Group message encryption keys
+- **App state sync keys** - Sync app state across devices
+
+<Note>
+  Keys are updated automatically when messages are sent/received. Always save keys when `creds.update` fires to prevent message delivery failures.
+</Note>
+
+## Caching Keys for Performance
+
+For better performance, use `makeCacheableSignalKeyStore`:
+
+```typescript
+import { useMultiFileAuthState, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+
+const sock = makeWASocket({
+    auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger)
+    }
+})
+
+sock.ev.on('creds.update', saveCreds)
+```
+
+### Benefits of Caching
+
+- Reduces disk I/O operations
+- Faster message encryption/decryption
+- Improves overall socket performance
+- Recommended for production use
+
+## Custom Auth State Implementation
+
+For production systems, implement a custom auth state using a database:
+
+```typescript
+import { AuthenticationState, SignalDataTypeMap } from '@whiskeysockets/baileys'
+
+const usePostgresAuthState = async (): Promise<AuthenticationState> => {
+    // Load creds from database
+    const creds = await db.query('SELECT * FROM auth_creds WHERE id = 1')
+    
+    return {
+        creds: creds || initAuthCreds(),
+        keys: {
+            get: async (type, ids) => {
+                const data: Record<string, any> = {}
+                const results = await db.query(
+                    'SELECT id, data FROM auth_keys WHERE type = $1 AND id = ANY($2)',
+                    [type, ids]
+                )
+                
+                for (const row of results) {
+                    data[row.id] = JSON.parse(row.data)
+                }
+                
+                return data
+            },
+            set: async (data) => {
+                for (const type in data) {
+                    for (const id in data[type]) {
+                        const value = data[type][id]
+                        
+                        if (value) {
+                            await db.query(
+                                'INSERT INTO auth_keys (type, id, data) VALUES ($1, $2, $3) ON CONFLICT (type, id) DO UPDATE SET data = $3',
+                                [type, id, JSON.stringify(value)]
+                            )
+                        } else {
+                            await db.query(
+                                'DELETE FROM auth_keys WHERE type = $1 AND id = $2',
+                                [type, id]
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Usage
+const state = await usePostgresAuthState()
+const sock = makeWASocket({ auth: state })
+```
+
+<Warning>
+  When implementing custom auth state, you MUST handle the `creds.update` event and save credentials. Failing to do so will cause authentication failures and message delivery issues.
+</Warning>
+
+## Session Persistence
+
+Always persist authentication state:
+
+```typescript
+import { useMultiFileAuthState, BufferJSON } from '@whiskeysockets/baileys'
+
+const connectToWhatsApp = async () => {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys')
+    
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true
+    })
+    
+    // CRITICAL: Save credentials on every update
+    sock.ev.on('creds.update', saveCreds)
+    
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update
+        
+        if (connection === 'close') {
+            const shouldReconnect = 
+                lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+                
+            if (shouldReconnect) {
+                connectToWhatsApp()
+            }
+        } else if (connection === 'open') {
+            console.log('Connected!')
+        }
+    })
+}
+
+connectToWhatsApp()
+```
+
+## BufferJSON Utility
+
+When serializing auth state to JSON, use the `BufferJSON` utility:
+
+```typescript
+import { BufferJSON } from '@whiskeysockets/baileys'
+import fs from 'fs'
+
+// Save with BufferJSON
+const saveData = (data: any, file: string) => {
+    fs.writeFileSync(
+        file, 
+        JSON.stringify(data, BufferJSON.replacer)
+    )
+}
+
+// Load with BufferJSON
+const loadData = (file: string) => {
+    const data = fs.readFileSync(file, 'utf-8')
+    return JSON.parse(data, BufferJSON.reviver)
+}
+```
+
+<Note>
+  `BufferJSON` ensures that Buffer objects in the auth state are correctly serialized and deserialized.
+</Note>
+
+## Multi-Device Support
+
+Baileys supports WhatsApp's multi-device feature:
+
+- Each device has its own authentication state
+- Keys are managed independently per device
+- Sessions are synced across devices via app state
+
+```typescript
+// Device 1
+const { state: state1 } = await useMultiFileAuthState('device1_auth')
+const sock1 = makeWASocket({ auth: state1 })
+
+// Device 2
+const { state: state2 } = await useMultiFileAuthState('device2_auth')
+const sock2 = makeWASocket({ auth: state2 })
+```
+
+## Security Best Practices
+
+<Warning>
+  Authentication files contain sensitive encryption keys. Follow these security practices:
+</Warning>
+
+1. **Never share auth files** - Each device should have unique credentials
+2. **Secure file permissions** - Restrict access to auth folder (chmod 700)
+3. **Encrypt at rest** - Use disk encryption for auth storage
+4. **Exclude from backups** - Don't backup auth files to cloud services
+5. **Rotate credentials** - Re-authenticate periodically for sensitive applications
+
+## Checking Registration Status
+
+Check if the device is registered:
+
+```typescript
+const sock = makeWASocket({ auth: state })
+
+if (!sock.authState.creds.registered) {
+    console.log('Not registered, need to authenticate')
+    // Show QR code or request pairing code
+} else {
+    console.log('Already registered, will connect automatically')
+}
+```
+
+## Handling Auth Errors
+
+```typescript
+sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update
+    
+    if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode
+        
+        if (statusCode === DisconnectReason.loggedOut) {
+            console.log('Logged out - delete auth files and re-authenticate')
+            // Delete auth folder and restart
+        } else if (statusCode === DisconnectReason.badSession) {
+            console.log('Bad session - delete auth files')
+            // Delete auth folder and restart
+        }
+    }
+})
+```

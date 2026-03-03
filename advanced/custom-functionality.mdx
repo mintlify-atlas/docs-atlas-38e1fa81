@@ -1,0 +1,214 @@
+---
+title: 'Custom Functionality'
+description: 'Extend Baileys with custom handlers and functionality'
+---
+
+Baileys is designed with extensibility in mind. Instead of forking the project and rewriting internals, you can write your own extensions by registering custom WebSocket event handlers.
+
+## Writing Custom Extensions
+
+You can extend Baileys to handle custom WhatsApp Web protocol messages without modifying the library's core code.
+
+### Enable Debug Logging
+
+First, enable debug-level logging to see all messages WhatsApp sends:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+import P from 'pino'
+
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+```
+
+This will print all unhandled messages from WhatsApp to the console, allowing you to identify messages you want to handle.
+
+<Note>
+For even more detailed output, use `level: 'trace'` to see the raw XML representation of all binary nodes.
+</Note>
+
+### Understanding the Message Format
+
+WhatsApp communicates using a binary node structure. When you enable debug logging, you'll see messages like:
+
+```json
+{
+    "level": 10,
+    "fromMe": false,
+    "frame": {
+        "tag": "ib",
+        "attrs": {
+            "from": "@s.whatsapp.net"
+        },
+        "content": [
+            {
+                "tag": "edge_routing",
+                "attrs": {},
+                "content": [
+                    {
+                        "tag": "routing_info",
+                        "attrs": {},
+                        "content": {
+                            "type": "Buffer",
+                            "data": [8,2,8,5]
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "msg": "communication"
+}
+```
+
+### BinaryNode Structure
+
+Each frame/message has three main components:
+
+- **tag** - Identifies what the frame is about (e.g., `message`, `ib`, `iq`)
+- **attrs** - String key-value pairs with metadata (usually contains message ID, type, etc.)
+- **content** - The actual data (can be nested BinaryNodes, string, or Uint8Array)
+
+```typescript
+type BinaryNode = {
+    tag: string
+    attrs: { [key: string]: string }
+    content?: BinaryNode[] | string | Uint8Array
+}
+```
+
+<Tip>
+Read more about the binary node format in the [WebSocket Events](/advanced/websocket-events) documentation.
+</Tip>
+
+## Registering Custom Handlers
+
+Once you've identified a message type you want to handle, you can register a callback using the WebSocket event system.
+
+### Basic Handler Registration
+
+The pattern for registering handlers is documented in the [WebSocket Events](/advanced/websocket-events) page:
+
+```typescript
+// Handle any message with tag 'edge_routing'
+sock.ws.on('CB:edge_routing', (node: BinaryNode) => {
+    console.log('Edge routing message:', node)
+})
+```
+
+### Example: Battery Percentage Tracker
+
+Here's a complete example of tracking your phone's battery percentage:
+
+```typescript
+import makeWASocket, { BinaryNode } from '@whiskeysockets/baileys'
+import P from 'pino'
+
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+
+// Register handler for battery updates
+sock.ws.on('CB:ib,,battery', (node: BinaryNode) => {
+    const batteryNode = node.content?.find(
+        (child: BinaryNode) => child.tag === 'battery'
+    )
+    
+    if (batteryNode?.attrs) {
+        const level = batteryNode.attrs.level
+        const charging = batteryNode.attrs.charging === 'true'
+        
+        console.log(`Battery: ${level}% ${charging ? '(charging)' : ''}`)
+    }
+})
+```
+
+### Example: Custom Presence Handler
+
+Handle custom presence events:
+
+```typescript
+sock.ws.on('CB:presence', (node: BinaryNode) => {
+    const from = node.attrs.from
+    const type = node.attrs.type // 'available', 'unavailable', 'composing'
+    
+    console.log(`${from} is now ${type}`)
+})
+```
+
+## Advanced Pattern Matching
+
+You can register handlers with specific attribute matching. See the [WebSocket Events](/advanced/websocket-events) documentation for the full pattern syntax:
+
+```typescript
+// Match specific tag and attribute value
+sock.ws.on('CB:iq,type:result', (node: BinaryNode) => {
+    console.log('IQ result received:', node)
+})
+
+// Match tag, attribute, and first content child
+sock.ws.on('CB:iq,id:my-custom-id,query', (node: BinaryNode) => {
+    console.log('Custom query response:', node)
+})
+```
+
+## Best Practices
+
+<Warning>
+Avoid modifying core Baileys internals. Use the event system to extend functionality instead.
+</Warning>
+
+### Type Safety
+
+Always import and use the `BinaryNode` type:
+
+```typescript
+import { BinaryNode } from '@whiskeysockets/baileys'
+
+sock.ws.on('CB:message', (node: BinaryNode) => {
+    // TypeScript will provide autocomplete for node.tag, node.attrs, etc.
+})
+```
+
+### Error Handling
+
+Wrap your custom handlers in try-catch blocks:
+
+```typescript
+sock.ws.on('CB:custom-event', (node: BinaryNode) => {
+    try {
+        // Your custom logic
+        processCustomMessage(node)
+    } catch (error) {
+        console.error('Error handling custom event:', error)
+    }
+})
+```
+
+### Avoid Blocking Operations
+
+Use async handlers for I/O operations:
+
+```typescript
+sock.ws.on('CB:message', async (node: BinaryNode) => {
+    // Perform async operations without blocking
+    await saveMessageToDatabase(node)
+})
+```
+
+## Learning the Protocol
+
+<Tip>
+If you want to learn more about the WhatsApp Web protocol, study:
+- **Libsignal Protocol** - For understanding encryption
+- **Noise Protocol** - For understanding the handshake mechanism
+</Tip>
+
+The source code in `src/Socket/socket.ts` contains the `onMessageReceived` function, which shows how Baileys processes and routes WebSocket events internally.
+
+## Next Steps
+
+- Learn about [WebSocket event patterns](/advanced/websocket-events)
+- Set up [debugging and logging](/advanced/debugging)
+- Explore [broadcast and status messages](/advanced/broadcast-stories)

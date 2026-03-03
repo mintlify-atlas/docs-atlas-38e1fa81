@@ -1,0 +1,316 @@
+---
+title: 'Privacy Settings'
+description: 'Learn how to manage privacy settings including blocking users, last seen, online status, read receipts, and group permissions in Baileys'
+---
+
+## Overview
+
+Baileys provides comprehensive privacy controls to manage who can see your information and interact with you on WhatsApp.
+
+## Block/Unblock Users
+
+Block users to prevent them from sending you messages or seeing your online status.
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+
+// Block a user
+await sock.updateBlockStatus(jid, 'block')
+
+// Unblock a user
+await sock.updateBlockStatus(jid, 'unblock')
+```
+
+### Get Block List
+
+Retrieve the list of all blocked contacts.
+
+```typescript
+const blockedJids = await sock.fetchBlocklist()
+console.log('Blocked contacts:', blockedJids)
+```
+
+## Privacy Settings
+
+Control who can see your personal information and interact with you.
+
+### Privacy Values
+
+Most privacy settings support these values:
+
+| Value | Description |
+|-------|-------------|
+| `'all'` | Everyone |
+| `'contacts'` | Only your contacts |
+| `'contact_blacklist'` | Contacts except blocked ones |
+| `'none'` | Nobody |
+
+### Fetch Privacy Settings
+
+Get your current privacy settings.
+
+```typescript
+const privacySettings = await sock.fetchPrivacySettings()
+console.log('Current privacy settings:', privacySettings)
+
+// Force refresh from server
+const refreshedSettings = await sock.fetchPrivacySettings(true)
+```
+
+## Last Seen Privacy
+
+Control who can see when you were last online.
+
+```typescript
+// Everyone can see
+await sock.updateLastSeenPrivacy('all')
+
+// Only contacts can see
+await sock.updateLastSeenPrivacy('contacts')
+
+// Contacts except blocked
+await sock.updateLastSeenPrivacy('contact_blacklist')
+
+// Nobody can see
+await sock.updateLastSeenPrivacy('none')
+```
+
+## Online Status Privacy
+
+Control who can see when you're online.
+
+```typescript
+// Everyone can see
+await sock.updateOnlinePrivacy('all')
+
+// Match last seen setting
+await sock.updateOnlinePrivacy('match_last_seen')
+```
+
+<Note>
+The `'match_last_seen'` option makes your online status visible to the same people who can see your last seen.
+</Note>
+
+## Profile Picture Privacy
+
+Control who can see your profile picture.
+
+```typescript
+// Everyone can see
+await sock.updateProfilePicturePrivacy('all')
+
+// Only contacts
+await sock.updateProfilePicturePrivacy('contacts')
+
+// Contacts except blocked
+await sock.updateProfilePicturePrivacy('contact_blacklist')
+
+// Nobody
+await sock.updateProfilePicturePrivacy('none')
+```
+
+## Status Privacy
+
+Control who can see your status updates.
+
+```typescript
+// Everyone can see
+await sock.updateStatusPrivacy('all')
+
+// Only contacts
+await sock.updateStatusPrivacy('contacts')
+
+// Contacts except blocked
+await sock.updateStatusPrivacy('contact_blacklist')
+
+// Nobody
+await sock.updateStatusPrivacy('none')
+```
+
+## Read Receipts Privacy
+
+Control whether others can see when you've read their messages (blue ticks).
+
+```typescript
+// Send read receipts
+await sock.updateReadReceiptsPrivacy('all')
+
+// Don't send read receipts
+await sock.updateReadReceiptsPrivacy('none')
+```
+
+<Warning>
+If you disable read receipts, you also won't be able to see when others have read your messages.
+</Warning>
+
+## Groups Add Privacy
+
+Control who can add you to groups.
+
+```typescript
+// Everyone can add you
+await sock.updateGroupsAddPrivacy('all')
+
+// Only contacts can add you
+await sock.updateGroupsAddPrivacy('contacts')
+
+// Contacts except blocked
+await sock.updateGroupsAddPrivacy('contact_blacklist')
+```
+
+## Messages Privacy
+
+Control who can message you.
+
+```typescript
+// Everyone can message you
+await sock.updateMessagesPrivacy('all')
+
+// Only contacts can message you
+await sock.updateMessagesPrivacy('contacts')
+```
+
+## Call Privacy
+
+Control who can call you.
+
+```typescript
+// Everyone can call you
+await sock.updateCallPrivacy('all')
+
+// Only known contacts can call you
+await sock.updateCallPrivacy('known')
+```
+
+## Default Disappearing Messages
+
+Set the default disappearing message duration for new chats.
+
+### Supported Durations
+
+| Duration | Seconds |
+|----------|----------|
+| Off | `0` |
+| 24 hours | `86400` |
+| 7 days | `604800` |
+| 90 days | `7776000` |
+
+```typescript
+// Enable 7-day disappearing messages by default
+await sock.updateDefaultDisappearingMode(604800)
+
+// Disable default disappearing messages
+await sock.updateDefaultDisappearingMode(0)
+```
+
+<Note>
+This setting only affects new chats. Existing chats maintain their own disappearing message settings.
+</Note>
+
+## Complete Privacy Setup Example
+
+Here's an example of configuring all privacy settings for maximum privacy:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+  // your config
+})
+
+// Wait for connection
+sock.ev.on('connection.update', async (update) => {
+  if (update.connection === 'open') {
+    console.log('Connected! Setting up privacy...')
+    
+    // Set all privacy to contacts only
+    await sock.updateLastSeenPrivacy('contacts')
+    await sock.updateOnlinePrivacy('match_last_seen')
+    await sock.updateProfilePicturePrivacy('contacts')
+    await sock.updateStatusPrivacy('contacts')
+    await sock.updateGroupsAddPrivacy('contacts')
+    
+    // Disable read receipts
+    await sock.updateReadReceiptsPrivacy('none')
+    
+    // Only contacts can message and call
+    await sock.updateMessagesPrivacy('contacts')
+    await sock.updateCallPrivacy('known')
+    
+    // Enable 7-day disappearing messages by default
+    await sock.updateDefaultDisappearingMode(604800)
+    
+    console.log('Privacy settings configured!')
+    
+    // Fetch and display current settings
+    const settings = await sock.fetchPrivacySettings(true)
+    console.log('Current privacy settings:', settings)
+  }
+})
+```
+
+## Checking Current Privacy Settings
+
+```typescript
+// Fetch current settings
+const privacySettings = await sock.fetchPrivacySettings()
+
+// Example output:
+// {
+//   readreceipts: 'all',
+//   profile: 'contacts',
+//   status: 'contacts',
+//   online: 'all',
+//   last: 'contacts',
+//   groupadd: 'all'
+// }
+
+// Check specific setting
+if (privacySettings.readreceipts === 'all') {
+  console.log('Read receipts are enabled')
+}
+```
+
+## Privacy Best Practices
+
+<Tabs>
+  <Tab title="Maximum Privacy">
+    ```typescript
+    // Strictest privacy settings
+    await sock.updateLastSeenPrivacy('none')
+    await sock.updateOnlinePrivacy('match_last_seen')
+    await sock.updateProfilePicturePrivacy('contacts')
+    await sock.updateStatusPrivacy('contacts')
+    await sock.updateReadReceiptsPrivacy('none')
+    await sock.updateGroupsAddPrivacy('contacts')
+    await sock.updateMessagesPrivacy('contacts')
+    await sock.updateCallPrivacy('known')
+    ```
+  </Tab>
+  <Tab title="Balanced">
+    ```typescript
+    // Balance between privacy and functionality
+    await sock.updateLastSeenPrivacy('contacts')
+    await sock.updateOnlinePrivacy('all')
+    await sock.updateProfilePicturePrivacy('contacts')
+    await sock.updateStatusPrivacy('contacts')
+    await sock.updateReadReceiptsPrivacy('all')
+    await sock.updateGroupsAddPrivacy('contacts')
+    await sock.updateMessagesPrivacy('all')
+    await sock.updateCallPrivacy('all')
+    ```
+  </Tab>
+  <Tab title="Maximum Availability">
+    ```typescript
+    // Most open settings
+    await sock.updateLastSeenPrivacy('all')
+    await sock.updateOnlinePrivacy('all')
+    await sock.updateProfilePicturePrivacy('all')
+    await sock.updateStatusPrivacy('all')
+    await sock.updateReadReceiptsPrivacy('all')
+    await sock.updateGroupsAddPrivacy('all')
+    await sock.updateMessagesPrivacy('all')
+    await sock.updateCallPrivacy('all')
+    ```
+  </Tab>
+</Tabs>

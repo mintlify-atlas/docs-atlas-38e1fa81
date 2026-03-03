@@ -1,0 +1,334 @@
+---
+title: 'WebSocket Events'
+description: 'Understanding WebSocket event patterns and BinaryNode structure'
+---
+
+Baileys communicates with WhatsApp Web servers using WebSockets and a custom binary protocol. This page explains how to listen to and handle WebSocket events.
+
+## Event System Overview
+
+Baileys uses an event-driven architecture where you can register callbacks for specific WebSocket events using the `sock.ws.on()` pattern.
+
+### Event Callback Prefix
+
+All WebSocket event callbacks use the `CB:` prefix by default:
+
+```typescript
+import { DEF_CALLBACK_PREFIX } from '@whiskeysockets/baileys'
+
+console.log(DEF_CALLBACK_PREFIX) // 'CB:'
+```
+
+## BinaryNode Structure
+
+WhatsApp messages are transmitted as binary nodes with a simple structure:
+
+```typescript
+type BinaryNode = {
+    tag: string
+    attrs: { [key: string]: string }
+    content?: BinaryNode[] | string | Uint8Array
+}
+```
+
+### Components Explained
+
+**tag** - Identifies the message type
+- Examples: `message`, `ib`, `iq`, `receipt`, `notification`, `presence`
+
+**attrs** - Key-value metadata
+- Common attributes: `id`, `from`, `to`, `type`, `participant`
+- All values are strings
+
+**content** - The message payload
+- Can be nested `BinaryNode[]` for complex messages
+- Can be `string` for text data
+- Can be `Uint8Array` for binary data (encrypted payloads, media, etc.)
+
+### Example BinaryNode
+
+```typescript
+const exampleNode: BinaryNode = {
+    tag: 'iq',
+    attrs: {
+        id: '12345',
+        type: 'result',
+        from: 's.whatsapp.net'
+    },
+    content: [
+        {
+            tag: 'query',
+            attrs: { xmlns: 'status' },
+            content: 'Hello World'
+        }
+    ]
+}
+```
+
+## Event Pattern Matching
+
+Baileys provides flexible pattern matching for WebSocket events. The pattern determines which messages trigger your callback.
+
+### Basic Pattern: Tag Only
+
+Listen for all messages with a specific tag:
+
+```typescript
+import { BinaryNode } from '@whiskeysockets/baileys'
+
+// Fires for ANY message with tag 'message'
+sock.ws.on('CB:message', (node: BinaryNode) => {
+    console.log('Message received:', node)
+})
+
+// Fires for ANY message with tag 'presence'
+sock.ws.on('CB:presence', (node: BinaryNode) => {
+    console.log('Presence update:', node.attrs.from, node.attrs.type)
+})
+```
+
+### Pattern: Tag + Attribute
+
+Match messages with a specific tag AND attribute value:
+
+```typescript
+// Only IQ messages with type='result'
+sock.ws.on('CB:iq,type:result', (node: BinaryNode) => {
+    console.log('IQ result:', node)
+})
+
+// Only IQ messages with type='set'
+sock.ws.on('CB:iq,type:set', (node: BinaryNode) => {
+    console.log('IQ set request:', node)
+})
+```
+
+The pattern format is: `CB:{tag},{attrKey}:{attrValue}`
+
+### Pattern: Tag + Attribute + Content Tag
+
+Match the first content child's tag:
+
+```typescript
+// Match: tag='iq', type='set', first content child tag='pair-device'
+sock.ws.on('CB:iq,type:set,pair-device', (node: BinaryNode) => {
+    console.log('Pair device request:', node)
+})
+
+// Match: tag='ib', any attributes, first content child tag='offline'
+sock.ws.on('CB:ib,,offline', (node: BinaryNode) => {
+    console.log('Offline notifications received:', node)
+})
+```
+
+The pattern format is: `CB:{tag},{attrKey}:{attrValue},{contentTag}`
+
+<Note>
+Notice the double comma `,,` when you want to match content tag but don't care about a specific attribute.
+</Note>
+
+### Pattern: Multiple Attributes
+
+You can match against multiple attributes:
+
+```typescript
+// Match tag='iq', id='abcd'
+sock.ws.on('CB:iq,id:abcd', (node: BinaryNode) => {
+    console.log('Specific IQ response:', node)
+})
+
+// Match tag='iq', id='abcd', first content='query'
+sock.ws.on('CB:iq,id:abcd,query', (node: BinaryNode) => {
+    console.log('Query response:', node)
+})
+```
+
+## Event Routing Internals
+
+When a message arrives, Baileys emits multiple events in a specific order:
+
+```typescript
+// From src/Socket/socket.ts - onMessageReceived function
+const l0 = frame.tag
+const l1 = frame.attrs || {}
+const l2 = Array.isArray(frame.content) ? frame.content[0]?.tag : ''
+
+// Events are emitted in this order:
+// 1. TAG:{msgId} - for awaiting specific responses
+ws.emit(`TAG:${msgId}`, frame)
+
+// 2. CB:{tag},{key}:{value},{contentTag}
+for (const key of Object.keys(l1)) {
+    ws.emit(`CB:${l0},${key}:${l1[key]},${l2}`, frame)
+    ws.emit(`CB:${l0},${key}:${l1[key]}`, frame)
+    ws.emit(`CB:${l0},${key}`, frame)
+}
+
+// 3. CB:{tag},,{contentTag}
+ws.emit(`CB:${l0},,${l2}`, frame)
+
+// 4. CB:{tag}
+ws.emit(`CB:${l0}`, frame)
+```
+
+<Tip>
+The most specific pattern is checked first. Register the most specific handler you need to avoid unnecessary callbacks.
+</Tip>
+
+## Common Event Patterns
+
+Here are real-world examples from the Baileys source code:
+
+### Connection Events
+
+```typescript
+// Stream ended by server
+sock.ws.on('CB:xmlstreamend', () => {
+    console.log('Stream ended')
+})
+
+// Pair device request (QR code)
+sock.ws.on('CB:iq,type:set,pair-device', async (stanza: BinaryNode) => {
+    console.log('QR code pairing requested')
+})
+
+// Successful pairing
+sock.ws.on('CB:iq,,pair-success', async (stanza: BinaryNode) => {
+    console.log('Device paired successfully')
+})
+
+// Connection success
+sock.ws.on('CB:success', async (node: BinaryNode) => {
+    console.log('Logged in successfully')
+})
+
+// Stream error
+sock.ws.on('CB:stream:error', (node: BinaryNode) => {
+    console.error('Stream error:', node)
+})
+
+// Connection failure
+sock.ws.on('CB:failure', (node: BinaryNode) => {
+    console.error('Connection failed:', node.attrs.reason)
+})
+```
+
+### Message Events
+
+```typescript
+// Incoming messages
+sock.ws.on('CB:message', async (node: BinaryNode) => {
+    console.log('New message:', node)
+})
+
+// Message receipts (delivered, read, etc.)
+sock.ws.on('CB:receipt', async (node: BinaryNode) => {
+    console.log('Receipt:', node.attrs.type)
+})
+
+// Notifications (group changes, etc.)
+sock.ws.on('CB:notification', async (node: BinaryNode) => {
+    console.log('Notification:', node.attrs.type)
+})
+
+// Message acknowledgment
+sock.ws.on('CB:ack,class:message', (node: BinaryNode) => {
+    console.log('Message acknowledged')
+})
+```
+
+### Presence & Chat State
+
+```typescript
+// User presence (online, offline)
+sock.ws.on('CB:presence', (node: BinaryNode) => {
+    const from = node.attrs.from
+    const type = node.attrs.type // 'available', 'unavailable'
+    console.log(`${from} is ${type}`)
+})
+
+// Typing indicator, recording audio, etc.
+sock.ws.on('CB:chatstate', (node: BinaryNode) => {
+    const from = node.attrs.from
+    const state = node.attrs.type // 'composing', 'recording'
+    console.log(`${from} is ${state}`)
+})
+```
+
+### Data Sync Events
+
+```typescript
+// Dirty flag (data needs syncing)
+sock.ws.on('CB:ib,,dirty', async (node: BinaryNode) => {
+    console.log('Data sync required')
+})
+
+// Offline messages received
+sock.ws.on('CB:ib,,offline', (node: BinaryNode) => {
+    const child = getBinaryNodeChild(node, 'offline')
+    const count = +(child?.attrs.count || 0)
+    console.log(`Received ${count} offline messages`)
+})
+
+// Edge routing update
+sock.ws.on('CB:ib,,edge_routing', (node: BinaryNode) => {
+    console.log('Routing information updated')
+})
+```
+
+### Call Events
+
+```typescript
+// Incoming call
+sock.ws.on('CB:call', async (node: BinaryNode) => {
+    const callId = node.attrs.id
+    const from = node.attrs.from
+    console.log(`Call from ${from}:`, callId)
+})
+```
+
+## Debugging Event Flow
+
+Enable trace-level logging to see the XML representation of all frames:
+
+```typescript
+import P from 'pino'
+
+const sock = makeWASocket({
+    logger: P({ level: 'trace' })
+})
+```
+
+You'll see output like:
+
+```
+{xml: '<iq id="123" type="result">...</iq>', msg: 'recv xml'}
+```
+
+<Warning>
+Trace-level logging produces a LOT of output. Use it only for debugging specific issues.
+</Warning>
+
+## Frame Decoding
+
+Incoming WebSocket data is decoded through the noise protocol encryption:
+
+```typescript
+// Internal flow (from src/Socket/socket.ts)
+const onMessageReceived = async (data: Buffer) => {
+    await noise.decodeFrame(data, frame => {
+        // frame is either Uint8Array (raw binary) or BinaryNode
+        if (!(frame instanceof Uint8Array)) {
+            // It's a BinaryNode - emit events
+            ws.emit('frame', frame)
+            // ... pattern matching and event emission
+        }
+    })
+}
+```
+
+## Next Steps
+
+- Learn how to [write custom functionality](/advanced/custom-functionality)
+- Set up [debugging and troubleshooting](/advanced/debugging)
+- Explore the source code in `src/Socket/socket.ts:583` to see `onMessageReceived`

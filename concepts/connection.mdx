@@ -1,0 +1,252 @@
+---
+title: Connection
+description: Learn how to establish and manage connections to WhatsApp Web using QR codes or pairing codes
+icon: 'link'
+---
+
+Baileys connects to WhatsApp Web using WebSockets, allowing you to authenticate as a second WhatsApp client. You have two methods to establish a connection: scanning a QR code or using a pairing code.
+
+## Connection Methods
+
+<Tabs>
+  <Tab title="QR Code">
+    The QR code method displays a scannable QR code that you scan with your phone's WhatsApp app.
+
+    ```typescript
+    import makeWASocket, { Browsers } from '@whiskeysockets/baileys'
+
+    const sock = makeWASocket({
+        printQRInTerminal: true,
+        browser: Browsers.ubuntu('My Custom App')
+    })
+    ```
+
+    <Note>
+      You can customize the browser name shown in WhatsApp's "Linked Devices" section using the `browser` option.
+    </Note>
+
+    ### Listening for QR Code
+
+    ```typescript
+    sock.ev.on('connection.update', (update) => {
+        const { connection, qr } = update
+        
+        if (qr) {
+            // QR code received, display it to user
+            console.log('Scan this QR code:', qr)
+        }
+        
+        if (connection === 'open') {
+            console.log('Connection established!')
+        }
+    })
+    ```
+  </Tab>
+
+  <Tab title="Pairing Code">
+    The pairing code method generates an 8-digit code that you enter on your phone.
+
+    <Warning>
+      Pairing codes only work for WhatsApp Web connections, not the mobile API. You can only connect one device at a time using pairing codes.
+    </Warning>
+
+    ```typescript
+    import makeWASocket from '@whiskeysockets/baileys'
+
+    const sock = makeWASocket({
+        printQRInTerminal: false // Must be false for pairing code
+    })
+
+    if (!sock.authState.creds.registered) {
+        // Phone number without +, (), or - (only numbers)
+        const phoneNumber = '1234567890' // Include country code
+        const code = await sock.requestPairingCode(phoneNumber)
+        console.log(`Pairing code: ${code}`)
+    }
+    ```
+
+    <Note>
+      The phone number must include the country code and contain only digits (no special characters).
+    </Note>
+  </Tab>
+</Tabs>
+
+## Browser Configuration
+
+You can customize how your connection appears in WhatsApp's "Linked Devices" list:
+
+```typescript
+import { Browsers } from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+    browser: Browsers.macOS('My Bot'),      // Shows as "My Bot" on Mac OS
+    // or
+    browser: Browsers.windows('My App'),    // Shows as "My App" on Windows
+    // or
+    browser: Browsers.ubuntu('My Service'), // Shows as "My Service" on Ubuntu
+    // or
+    browser: Browsers.appropriate('Auto'),  // Auto-detects your OS
+})
+```
+
+### Available Browser Configs
+
+| Browser Function | OS | Browser | Version |
+|-----------------|-------|---------|----------|
+| `Browsers.ubuntu(name)` | Ubuntu | Custom | 22.04.4 |
+| `Browsers.macOS(name)` | Mac OS | Custom | 14.4.1 |
+| `Browsers.windows(name)` | Windows | Custom | 10.0.22631 |
+| `Browsers.baileys(name)` | Baileys | Custom | 6.5.0 |
+| `Browsers.appropriate(name)` | Auto | Custom | Your OS version |
+
+## Connection States
+
+Monitor your connection status through the `connection.update` event:
+
+```typescript
+sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update
+    
+    if (connection === 'close') {
+        const shouldReconnect = 
+            (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut
+        
+        if (shouldReconnect) {
+            // Reconnect if not logged out
+            startConnection()
+        }
+    } else if (connection === 'open') {
+        console.log('Connected successfully!')
+    } else if (connection === 'connecting') {
+        console.log('Connecting...')
+    }
+})
+```
+
+### Connection States
+
+- `connecting` - Attempting to establish connection
+- `open` - Connection established and authenticated
+- `close` - Connection closed (check `lastDisconnect` for reason)
+
+## Receiving Full History
+
+By default, Baileys receives limited message history. To receive full history:
+
+<Steps>
+  <Step title="Enable full history sync">
+    Set `syncFullHistory` to `true` in your socket configuration.
+
+    ```typescript
+    const sock = makeWASocket({
+        syncFullHistory: true
+    })
+    ```
+  </Step>
+
+  <Step title="Configure browser for desktop">
+    Desktop connections receive more message history than mobile connections.
+
+    ```typescript
+    const sock = makeWASocket({
+        browser: Browsers.macOS('Desktop'),
+        syncFullHistory: true
+    })
+    ```
+  </Step>
+
+  <Step title="Listen for history sync">
+    History arrives through the `messaging-history.set` event.
+
+    ```typescript
+    sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+        console.log(`Received ${messages.length} messages`)
+        console.log(`Received ${chats.length} chats`)
+        console.log(`Received ${contacts.length} contacts`)
+        console.log('Is latest:', isLatest)
+    })
+    ```
+  </Step>
+</Steps>
+
+## Connection Configuration
+
+### Important Socket Options
+
+```typescript
+const sock = makeWASocket({
+    // Connection settings
+    waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
+    connectTimeoutMs: 20_000,
+    keepAliveIntervalMs: 30_000,
+    
+    // Authentication (see Authentication guide)
+    auth: state,
+    
+    // Browser identification
+    browser: Browsers.macOS('Chrome'),
+    
+    // History sync
+    syncFullHistory: true,
+    
+    // Online status
+    markOnlineOnConnect: true, // Set false to receive notifications on phone
+    
+    // Query timeout
+    defaultQueryTimeoutMs: 60_000,
+})
+```
+
+<Warning>
+  Setting `markOnlineOnConnect` to `false` allows you to receive notifications on your phone even while the bot is connected.
+</Warning>
+
+## Handling Disconnections
+
+Always implement proper reconnection logic:
+
+```typescript
+import { DisconnectReason } from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
+
+const startConnection = async () => {
+    const sock = makeWASocket({ /* config */ })
+    
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update
+        
+        if (connection === 'close') {
+            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+            
+            console.log('Connection closed:', lastDisconnect?.error)
+            
+            if (shouldReconnect) {
+                setTimeout(() => startConnection(), 3000)
+            }
+        }
+    })
+}
+```
+
+### Common Disconnect Reasons
+
+- `DisconnectReason.loggedOut` - User logged out (don't reconnect)
+- `DisconnectReason.connectionClosed` - Connection dropped (reconnect)
+- `DisconnectReason.connectionLost` - Network issue (reconnect)
+- `DisconnectReason.timedOut` - Request timeout (reconnect)
+
+## WebSocket URL Configuration
+
+You can customize the WebSocket endpoint:
+
+```typescript
+const sock = makeWASocket({
+    waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat' // Default
+    // or use custom proxy/tunnel
+})
+```
+
+<Note>
+  The default WebSocket URL connects directly to WhatsApp's servers. Only change this if you're using a proxy or custom routing.
+</Note>

@@ -1,0 +1,370 @@
+---
+title: 'Socket Configuration'
+description: 'Configuration options for makeWASocket'
+---
+
+## UserFacingSocketConfig
+
+The configuration object passed to `makeWASocket`.
+
+```typescript
+type UserFacingSocketConfig = Partial<SocketConfig> & {
+  auth: AuthenticationState
+}
+```
+
+All fields except `auth` are optional and will use default values from `DEFAULT_CONNECTION_CONFIG`.
+
+## Required Configuration
+
+<ParamField path="auth" type="AuthenticationState" required>
+  Authentication state object containing credentials and keys. Use `useMultiFileAuthState` or `useSingleFileAuthState` to create this.
+  
+  ```typescript
+  import { useMultiFileAuthState } from '@whiskeysockets/baileys'
+  
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+  
+  const sock = makeWASocket({
+      auth: state
+  })
+  ```
+</ParamField>
+
+## Connection Configuration
+
+<ParamField path="waWebSocketUrl" type="string | URL" default="'wss://web.whatsapp.com/ws/chat'">
+  The WebSocket URL to connect to WhatsApp Web.
+</ParamField>
+
+<ParamField path="connectTimeoutMs" type="number" default="20000">
+  Connection timeout in milliseconds. Connection fails if socket doesn't open within this time.
+</ParamField>
+
+<ParamField path="keepAliveIntervalMs" type="number" default="30000">
+  Ping-pong interval for WebSocket connection in milliseconds.
+</ParamField>
+
+<ParamField path="defaultQueryTimeoutMs" type="number | undefined" default="60000">
+  Default timeout for queries in milliseconds. Set to `undefined` for no timeout.
+</ParamField>
+
+<ParamField path="agent" type="Agent">
+  HTTPS proxy agent for the WebSocket connection.
+  
+  ```typescript
+  import { HttpsProxyAgent } from 'https-proxy-agent'
+  
+  const agent = new HttpsProxyAgent('http://proxy:8080')
+  
+  const sock = makeWASocket({
+      auth: state,
+      agent
+  })
+  ```
+</ParamField>
+
+<ParamField path="fetchAgent" type="Agent">
+  Agent used for fetch requests when uploading/downloading media. Separate from the WebSocket agent.
+</ParamField>
+
+## Client Identification
+
+<ParamField path="version" type="WAVersion" default="[2, 3000, 1033846690]">
+  WhatsApp Web version to use. Format: `[major, minor, patch]`.
+</ParamField>
+
+<ParamField path="browser" type="WABrowserDescription" default="Browsers.macOS('Chrome')">
+  Browser description sent to WhatsApp. Format: `[device, manufacturer, version]`.
+  
+  ```typescript
+  import { Browsers } from '@whiskeysockets/baileys'
+  
+  const sock = makeWASocket({
+      auth: state,
+      browser: Browsers.ubuntu('Chrome'),
+      // Or custom:
+      // browser: ['MyApp', 'MyCompany', '1.0.0']
+  })
+  ```
+</ParamField>
+
+## Logging
+
+<ParamField path="logger" type="ILogger" default="Pino logger">
+  Logger instance for debugging. Must implement `trace`, `debug`, `info`, `warn`, `error`, and `fatal` methods.
+  
+  ```typescript
+  import P from 'pino'
+  
+  const sock = makeWASocket({
+      auth: state,
+      logger: P({ level: 'debug' })
+  })
+  ```
+</ParamField>
+
+## Behavior Configuration
+
+<ParamField path="emitOwnEvents" type="boolean" default="true">
+  Whether to emit events for actions performed by this socket connection.
+</ParamField>
+
+<ParamField path="markOnlineOnConnect" type="boolean" default="true">
+  Automatically mark the client as online when the socket successfully connects.
+</ParamField>
+
+<ParamField path="fireInitQueries" type="boolean" default="true">
+  Automatically fire initialization queries on connection. Set to `false` if you want manual control.
+</ParamField>
+
+<ParamField path="syncFullHistory" type="boolean" default="true">
+  Whether Baileys should ask the phone for full message history (received asynchronously).
+</ParamField>
+
+<ParamField path="countryCode" type="string" default="'US'">
+  Alphanumeric country code for the phone number being used (e.g., 'US', 'GB', 'IN').
+</ParamField>
+
+## Message Handling
+
+<ParamField path="getMessage" type="(key: WAMessageKey) => Promise<proto.IMessage | undefined>" default="async () => undefined">
+  Fetch a message from your store. Implement this to enable message retries for failed sends.
+  
+  ```typescript
+  const getMessage = async (key) => {
+      const data = await messageDB.get(key.id)
+      return data?.message
+  }
+  
+  const sock = makeWASocket({
+      auth: state,
+      getMessage
+  })
+  ```
+</ParamField>
+
+<ParamField path="shouldSyncHistoryMessage" type="(msg: proto.Message.IHistorySyncNotification) => boolean">
+  Control which history sync messages to process. Default skips FULL sync type.
+  
+  ```typescript
+  shouldSyncHistoryMessage: ({ syncType }) => {
+      return syncType !== proto.HistorySync.HistorySyncType.FULL
+  }
+  ```
+</ParamField>
+
+<ParamField path="shouldIgnoreJid" type="(jid: string) => boolean | undefined" default="() => false">
+  Return `true` to ignore events and messages from specific JIDs. Messages from ignored JIDs won't be decrypted.
+  
+  ```typescript
+  shouldIgnoreJid: (jid) => {
+      // Ignore broadcast messages
+      return jid === 'status@broadcast'
+  }
+  ```
+</ParamField>
+
+<ParamField path="patchMessageBeforeSending" type="function">
+  ```typescript
+  (msg: proto.IMessage, recipientJids?: string[]) =>
+    Promise<PatchedMessageWithRecipientJID[] | PatchedMessageWithRecipientJID>
+    | PatchedMessageWithRecipientJID[] | PatchedMessageWithRecipientJID
+  ```
+  
+  Optionally modify messages before sending. Default returns the message unchanged.
+</ParamField>
+
+## Media Configuration
+
+<ParamField path="customUploadHosts" type="MediaConnInfo['hosts']" default="[]">
+  Custom upload hosts for media uploads.
+</ParamField>
+
+<ParamField path="linkPreviewImageThumbnailWidth" type="number" default="192">
+  Width for link preview thumbnail images in pixels.
+</ParamField>
+
+<ParamField path="generateHighQualityLinkPreview" type="boolean" default="false">
+  Generate high quality link previews by uploading the jpegThumbnail to WhatsApp.
+</ParamField>
+
+<ParamField path="options" type="RequestInit" default="{}">
+  Options for HTTP fetch requests (headers, etc.).
+</ParamField>
+
+## Retry & Error Handling
+
+<ParamField path="retryRequestDelayMs" type="number" default="250">
+  Time to wait between sending new retry requests in milliseconds.
+</ParamField>
+
+<ParamField path="maxMsgRetryCount" type="number" default="5">
+  Maximum retry count for failed messages.
+</ParamField>
+
+<ParamField path="enableAutoSessionRecreation" type="boolean" default="true">
+  Enable automatic session recreation for failed messages.
+</ParamField>
+
+<ParamField path="enableRecentMessageCache" type="boolean" default="true">
+  Enable recent message caching for retry handling.
+</ParamField>
+
+## Caching
+
+<ParamField path="mediaCache" type="CacheStore">
+  Cache to store media files to avoid re-uploading.
+  
+  ```typescript
+  interface CacheStore {
+      get<T>(key: string): Promise<T> | T | undefined
+      set<T>(key: string, value: T): Promise<void> | void | number | boolean
+      del(key: string): void | Promise<void> | number | boolean
+      flushAll(): void | Promise<void>
+  }
+  ```
+</ParamField>
+
+<ParamField path="msgRetryCounterCache" type="CacheStore">
+  Cache to store retry counts for failed messages.
+</ParamField>
+
+<ParamField path="userDevicesCache" type="PossiblyExtendedCacheStore">
+  Cache to store user device lists. Can optionally support batch operations:
+  
+  ```typescript
+  interface PossiblyExtendedCacheStore extends CacheStore {
+      mget?<T>(keys: string[]): Promise<Record<string, T | undefined>>
+      mset?<T>(entries: { key: string; value: T }[]): Promise<void> | void
+      mdel?(keys: string[]): void | Promise<void> | number | boolean
+  }
+  ```
+</ParamField>
+
+<ParamField path="callOfferCache" type="CacheStore">
+  Cache to store call offers.
+</ParamField>
+
+<ParamField path="placeholderResendCache" type="CacheStore">
+  Cache to track placeholder resend requests.
+</ParamField>
+
+## Advanced Configuration
+
+<ParamField path="qrTimeout" type="number">
+  Time to wait for QR code generation in milliseconds.
+</ParamField>
+
+<ParamField path="transactionOpts" type="TransactionCapabilityOptions" default="{ maxCommitRetries: 10, delayBetweenTriesMs: 3000 }">
+  Transaction options for SignalKeyStore operations.
+</ParamField>
+
+<ParamField path="appStateMacVerification" type="object" default="{ patch: false, snapshot: false }">
+  Verify app state MACs for security.
+  
+  ```typescript
+  {
+      patch: boolean
+      snapshot: boolean
+  }
+  ```
+</ParamField>
+
+<ParamField path="cachedGroupMetadata" type="(jid: string) => Promise<GroupMetadata | undefined>" default="async () => undefined">
+  Provide cached group metadata to prevent redundant requests and speed up message sending.
+  
+  ```typescript
+  const cachedGroupMetadata = async (jid) => {
+      return await groupMetadataDB.get(jid)
+  }
+  
+  const sock = makeWASocket({
+      auth: state,
+      cachedGroupMetadata
+  })
+  ```
+</ParamField>
+
+<ParamField path="makeSignalRepository" type="function">
+  ```typescript
+  (auth: SignalAuthState, logger: ILogger, pnToLIDFunc?: (jids: string[]) => Promise<LIDMapping[] | undefined>) => SignalRepositoryWithLIDStore
+  ```
+  
+  Factory function to create the Signal protocol repository. Default uses libsignal implementation.
+</ParamField>
+
+## Deprecated Options
+
+<ParamField path="mobile" type="boolean" deprecated>
+  **Deprecated.** This feature has been removed. Previously used to switch between mobile and multi-device API.
+</ParamField>
+
+<ParamField path="printQRInTerminal" type="boolean" deprecated>
+  **Deprecated.** This feature has been removed. Use the `connection.update` event to handle QR codes.
+  
+  ```typescript
+  sock.ev.on('connection.update', (update) => {
+      const { qr } = update
+      if(qr) {
+          // Use a QR code library to display
+          console.log('QR Code:', qr)
+      }
+  })
+  ```
+</ParamField>
+
+## Example: Full Configuration
+
+```typescript
+import makeWASocket, { 
+    useMultiFileAuthState,
+    Browsers,
+    DisconnectReason 
+} from '@whiskeysockets/baileys'
+import P from 'pino'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+const sock = makeWASocket({
+    // Required
+    auth: state,
+    
+    // Connection
+    connectTimeoutMs: 30000,
+    keepAliveIntervalMs: 25000,
+    defaultQueryTimeoutMs: 60000,
+    
+    // Client Info
+    browser: Browsers.macOS('Chrome'),
+    
+    // Logging
+    logger: P({ level: 'info' }),
+    
+    // Behavior
+    emitOwnEvents: true,
+    markOnlineOnConnect: true,
+    syncFullHistory: false,
+    
+    // Message Handling
+    getMessage: async (key) => {
+        return await messageStore.loadMessage(key.id)
+    },
+    
+    // Group Metadata Caching
+    cachedGroupMetadata: async (jid) => {
+        return await groupCache.get(jid)
+    },
+    
+    // Media
+    generateHighQualityLinkPreview: true,
+    linkPreviewImageThumbnailWidth: 192,
+    
+    // Retry
+    maxMsgRetryCount: 5,
+    retryRequestDelayMs: 250,
+    enableAutoSessionRecreation: true,
+})
+
+sock.ev.on('creds.update', saveCreds)
+```

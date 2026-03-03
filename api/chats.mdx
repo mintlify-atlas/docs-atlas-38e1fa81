@@ -1,0 +1,605 @@
+---
+title: 'Chat Management'
+description: 'Methods for managing chats, messages, and presence'
+---
+
+This page documents all chat-related methods available in the Baileys WhatsApp API.
+
+## Chat Modification
+
+### chatModify
+
+Modify chat settings such as archive, pin, mute, mark read, etc.
+
+<ParamField path="mod" type="ChatModification" required>
+  The modification to apply (see examples below)
+</ParamField>
+
+<ParamField path="jid" type="string" required>
+  The chat JID (use empty string for global settings)
+</ParamField>
+
+<ResponseField name="return" type="Promise<void>">
+  Applies the modification via app state patch
+</ResponseField>
+
+#### Archive/Unarchive Chat
+
+```typescript
+// Archive chat
+await sock.chatModify(
+  {
+    archive: true,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+
+// Unarchive chat
+await sock.chatModify(
+  {
+    archive: false,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+```
+
+#### Pin/Unpin Chat
+
+```typescript
+// Pin chat
+await sock.chatModify({ pin: true }, '1234567890@s.whatsapp.net')
+
+// Unpin chat
+await sock.chatModify({ pin: false }, '1234567890@s.whatsapp.net')
+```
+
+#### Mute/Unmute Chat
+
+```typescript
+// Mute for 8 hours
+await sock.chatModify(
+  { mute: 8 * 60 * 60 * 1000 },
+  '1234567890@s.whatsapp.net'
+)
+
+// Unmute
+await sock.chatModify(
+  { mute: null },
+  '1234567890@s.whatsapp.net'
+)
+```
+
+#### Mark Read/Unread
+
+```typescript
+// Mark as read
+await sock.chatModify(
+  {
+    markRead: true,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+
+// Mark as unread
+await sock.chatModify(
+  {
+    markRead: false,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+```
+
+#### Clear Chat
+
+```typescript
+await sock.chatModify(
+  {
+    clear: true,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+```
+
+#### Delete Chat
+
+```typescript
+await sock.chatModify(
+  {
+    delete: true,
+    lastMessages: [lastMessage]
+  },
+  '1234567890@s.whatsapp.net'
+)
+```
+
+## Message Operations
+
+### readMessages
+
+Mark messages as read.
+
+<ParamField path="keys" type="WAMessageKey[]" required>
+  Array of message keys to mark as read
+</ParamField>
+
+```typescript
+await sock.readMessages([{
+  remoteJid: '1234567890@s.whatsapp.net',
+  id: 'MESSAGE_ID',
+  fromMe: false
+}])
+```
+
+### star
+
+Star or unstar messages.
+
+<ParamField path="jid" type="string" required>
+  The chat JID
+</ParamField>
+
+<ParamField path="messages" type="Array<{ id: string, fromMe?: boolean }>" required>
+  Array of message identifiers
+</ParamField>
+
+<ParamField path="star" type="boolean" required>
+  Whether to star (true) or unstar (false)
+</ParamField>
+
+```typescript
+// Star messages
+await sock.star(
+  '1234567890@s.whatsapp.net',
+  [{ id: 'MESSAGE_ID', fromMe: false }],
+  true
+)
+
+// Unstar messages
+await sock.star(
+  '1234567890@s.whatsapp.net',
+  [{ id: 'MESSAGE_ID', fromMe: false }],
+  false
+)
+```
+
+## Presence Management
+
+### sendPresenceUpdate
+
+Update your presence status in a chat.
+
+<ParamField path="type" type="WAPresence" required>
+  Presence type: `'unavailable'`, `'available'`, `'composing'`, `'recording'`, or `'paused'`
+</ParamField>
+
+<ParamField path="toJid" type="string">
+  The chat JID (required for composing/recording/paused states)
+</ParamField>
+
+```typescript
+// Set as available (online)
+await sock.sendPresenceUpdate('available')
+
+// Set as unavailable (offline)
+await sock.sendPresenceUpdate('unavailable')
+
+// Show typing indicator
+await sock.sendPresenceUpdate('composing', '1234567890@s.whatsapp.net')
+
+// Show recording indicator
+await sock.sendPresenceUpdate('recording', '1234567890@s.whatsapp.net')
+
+// Stop typing/recording
+await sock.sendPresenceUpdate('paused', '1234567890@s.whatsapp.net')
+```
+
+### presenceSubscribe
+
+Subscribe to presence updates for a user.
+
+<ParamField path="toJid" type="string" required>
+  The user JID to subscribe to
+</ParamField>
+
+```typescript
+await sock.presenceSubscribe('1234567890@s.whatsapp.net')
+
+// Listen for presence updates
+sock.ev.on('presence.update', ({ id, presences }) => {
+  console.log('Presence update for', id)
+  for (const [participant, presence] of Object.entries(presences)) {
+    console.log(participant, 'is', presence.lastKnownPresence)
+  }
+})
+```
+
+## Profile Management
+
+### updateProfilePicture
+
+Update your profile picture or a group's picture.
+
+<ParamField path="jid" type="string" required>
+  Your JID or the group JID
+</ParamField>
+
+<ParamField path="content" type="WAMediaUpload" required>
+  The image file (Buffer, path, or URL)
+</ParamField>
+
+<ParamField path="dimensions" type="{ width: number, height: number }">
+  Optional dimensions for the image
+</ParamField>
+
+```typescript
+import { readFileSync } from 'fs'
+
+// Update your profile picture
+await sock.updateProfilePicture(
+  sock.user.id,
+  readFileSync('./profile.jpg')
+)
+
+// Update group picture
+await sock.updateProfilePicture(
+  '123456789@g.us',
+  readFileSync('./group.jpg')
+)
+```
+
+### removeProfilePicture
+
+Remove your profile picture or a group's picture.
+
+<ParamField path="jid" type="string" required>
+  Your JID or the group JID
+</ParamField>
+
+```typescript
+await sock.removeProfilePicture(sock.user.id)
+```
+
+### updateProfileStatus
+
+Update your profile status/about.
+
+<ParamField path="status" type="string" required>
+  The new status text
+</ParamField>
+
+```typescript
+await sock.updateProfileStatus('Hey there! I am using WhatsApp.')
+```
+
+### updateProfileName
+
+Update your profile name.
+
+<ParamField path="name" type="string" required>
+  The new profile name
+</ParamField>
+
+```typescript
+await sock.updateProfileName('John Doe')
+```
+
+### profilePictureUrl
+
+Fetch the profile picture URL for a user or group.
+
+<ParamField path="jid" type="string" required>
+  The user or group JID
+</ParamField>
+
+<ParamField path="type" type="'preview' | 'image'" default="preview">
+  - `preview`: Low resolution picture
+  - `image`: High resolution picture
+</ParamField>
+
+<ParamField path="timeoutMs" type="number">
+  Optional timeout in milliseconds
+</ParamField>
+
+<ResponseField name="return" type="Promise<string | undefined>">
+  Returns the profile picture URL
+</ResponseField>
+
+```typescript
+// Get preview (low-res)
+const previewUrl = await sock.profilePictureUrl('1234567890@s.whatsapp.net')
+
+// Get full image (high-res)
+const imageUrl = await sock.profilePictureUrl(
+  '1234567890@s.whatsapp.net',
+  'image'
+)
+```
+
+## Status & Business
+
+### fetchStatus
+
+Fetch the status/about of one or more users.
+
+<ParamField path="jids" type="string[]" required>
+  Array of user JIDs
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Returns array of status information
+</ResponseField>
+
+```typescript
+const statuses = await sock.fetchStatus(
+  '1234567890@s.whatsapp.net',
+  '0987654321@s.whatsapp.net'
+)
+```
+
+### getBusinessProfile
+
+Get the business profile for a WhatsApp Business account.
+
+<ParamField path="jid" type="string" required>
+  The business account JID
+</ParamField>
+
+<ResponseField name="return" type="Promise<WABusinessProfile | void>">
+  Returns the business profile with:
+  - `wid`: WhatsApp ID
+  - `description`: Business description
+  - `website`: Website URLs
+  - `email`: Contact email
+  - `category`: Business category
+  - `address`: Business address
+  - `business_hours`: Operating hours
+</ResponseField>
+
+```typescript
+const profile = await sock.getBusinessProfile('1234567890@s.whatsapp.net')
+if (profile) {
+  console.log('Business:', profile.description)
+  console.log('Website:', profile.website)
+}
+```
+
+## Contacts
+
+### addOrEditContact
+
+Add or update a contact.
+
+<ParamField path="jid" type="string" required>
+  The contact JID
+</ParamField>
+
+<ParamField path="contact" type="proto.SyncActionValue.IContactAction" required>
+  The contact information
+</ParamField>
+
+```typescript
+await sock.addOrEditContact(
+  '1234567890@s.whatsapp.net',
+  {
+    fullName: 'John Doe',
+    firstName: 'John'
+  }
+)
+```
+
+### removeContact
+
+Remove a contact.
+
+<ParamField path="jid" type="string" required>
+  The contact JID
+</ParamField>
+
+```typescript
+await sock.removeContact('1234567890@s.whatsapp.net')
+```
+
+## Labels
+
+### addLabel
+
+Create a new label.
+
+<ParamField path="jid" type="string" required>
+  Empty string for creating labels
+</ParamField>
+
+<ParamField path="labels" type="LabelActionBody" required>
+  The label information
+</ParamField>
+
+```typescript
+await sock.addLabel('', {
+  name: 'Important',
+  color: 0,
+  predefinedId: '1'
+})
+```
+
+### addChatLabel
+
+Add a label to a chat.
+
+<ParamField path="jid" type="string" required>
+  The chat JID
+</ParamField>
+
+<ParamField path="labelId" type="string" required>
+  The label ID to add
+</ParamField>
+
+```typescript
+await sock.addChatLabel('1234567890@s.whatsapp.net', 'LABEL_ID')
+```
+
+### removeChatLabel
+
+Remove a label from a chat.
+
+<ParamField path="jid" type="string" required>
+  The chat JID
+</ParamField>
+
+<ParamField path="labelId" type="string" required>
+  The label ID to remove
+</ParamField>
+
+```typescript
+await sock.removeChatLabel('1234567890@s.whatsapp.net', 'LABEL_ID')
+```
+
+### addMessageLabel
+
+Add a label to a message.
+
+<ParamField path="jid" type="string" required>
+  The chat JID
+</ParamField>
+
+<ParamField path="messageId" type="string" required>
+  The message ID
+</ParamField>
+
+<ParamField path="labelId" type="string" required>
+  The label ID to add
+</ParamField>
+
+```typescript
+await sock.addMessageLabel(
+  '1234567890@s.whatsapp.net',
+  'MESSAGE_ID',
+  'LABEL_ID'
+)
+```
+
+### removeMessageLabel
+
+Remove a label from a message.
+
+<ParamField path="jid" type="string" required>
+  The chat JID
+</ParamField>
+
+<ParamField path="messageId" type="string" required>
+  The message ID
+</ParamField>
+
+<ParamField path="labelId" type="string" required>
+  The label ID to remove
+</ParamField>
+
+```typescript
+await sock.removeMessageLabel(
+  '1234567890@s.whatsapp.net',
+  'MESSAGE_ID',
+  'LABEL_ID'
+)
+```
+
+## Quick Replies
+
+### addOrEditQuickReply
+
+Add or edit a quick reply message.
+
+<ParamField path="quickReply" type="QuickReplyAction" required>
+  The quick reply data
+</ParamField>
+
+```typescript
+await sock.addOrEditQuickReply({
+  shortcut: '/hello',
+  message: 'Hello! How can I help you?',
+  timestamp: Date.now().toString()
+})
+```
+
+### removeQuickReply
+
+Remove a quick reply.
+
+<ParamField path="timestamp" type="string" required>
+  The timestamp of the quick reply to remove
+</ParamField>
+
+```typescript
+await sock.removeQuickReply('1234567890')
+```
+
+## Utilities
+
+### fetchDisappearingDuration
+
+Fetch the default disappearing message duration for users.
+
+<ParamField path="jids" type="string[]" required>
+  Array of user JIDs
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Returns array of disappearing message settings
+</ResponseField>
+
+```typescript
+const durations = await sock.fetchDisappearingDuration(
+  '1234567890@s.whatsapp.net'
+)
+```
+
+### updateDefaultDisappearingMode
+
+Update your default disappearing message duration.
+
+<ParamField path="duration" type="number" required>
+  Duration in seconds (0 to disable)
+</ParamField>
+
+```typescript
+// Enable 7-day disappearing messages by default
+await sock.updateDefaultDisappearingMode(604800)
+
+// Disable
+await sock.updateDefaultDisappearingMode(0)
+```
+
+### updateDisableLinkPreviewsPrivacy
+
+Enable or disable link previews.
+
+<ParamField path="isPreviewsDisabled" type="boolean" required>
+  Whether to disable link previews
+</ParamField>
+
+```typescript
+// Disable link previews
+await sock.updateDisableLinkPreviewsPrivacy(true)
+
+// Enable link previews
+await sock.updateDisableLinkPreviewsPrivacy(false)
+```
+
+### cleanDirtyBits
+
+Clean dirty bits for account sync or groups.
+
+<ParamField path="type" type="'account_sync' | 'groups'" required>
+  The type of dirty bits to clean
+</ParamField>
+
+<ParamField path="fromTimestamp" type="number | string">
+  Optional timestamp to clean from
+</ParamField>
+
+```typescript
+await sock.cleanDirtyBits('account_sync')
+```

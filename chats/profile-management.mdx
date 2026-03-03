@@ -1,0 +1,331 @@
+---
+title: 'Profile Management'
+description: 'Learn how to update your profile name, status, and profile picture in Baileys'
+---
+
+## Overview
+
+Manage your WhatsApp profile information including your display name, status message, and profile picture. You can also manage group profile pictures using the same methods.
+
+## Update Profile Name
+
+Change your display name that appears to other users.
+
+```typescript
+await sock.updateProfileName('My New Name')
+```
+
+<Note>
+Your profile name is visible to all WhatsApp users, subject to your privacy settings.
+</Note>
+
+## Update Profile Status
+
+Set or update your status message (also known as "About").
+
+```typescript
+await sock.updateProfileStatus('Hey there! I am using WhatsApp.')
+```
+
+You can use any text for your status:
+
+```typescript
+// Simple status
+await sock.updateProfileStatus('Available')
+
+// Status with emoji
+await sock.updateProfileStatus('Working from home 🏠')
+
+// Clear status
+await sock.updateProfileStatus('')
+```
+
+## Fetch User Status
+
+Retrieve the status message of any WhatsApp user.
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+const status = await sock.fetchStatus(jid)
+console.log('Status:', status)
+```
+
+## Update Profile Picture
+
+Change your profile picture or a group's display picture.
+
+### For Your Own Profile
+
+```typescript
+// Using file path
+await sock.updateProfilePicture(
+  sock.user.id,
+  { url: './my-photo.jpg' }
+)
+```
+
+### For a Group
+
+```typescript
+const groupJid = '123456789@g.us'
+
+await sock.updateProfilePicture(
+  groupJid,
+  { url: './group-photo.jpg' }
+)
+```
+
+<Note>
+You must be a group admin to change a group's profile picture.
+</Note>
+
+### Supported Image Sources
+
+You can provide images in multiple formats:
+
+<Tabs>
+  <Tab title="File URL">
+    ```typescript
+    await sock.updateProfilePicture(
+      sock.user.id,
+      { url: './profile-pic.jpg' }
+    )
+    ```
+  </Tab>
+  <Tab title="HTTP URL">
+    ```typescript
+    await sock.updateProfilePicture(
+      sock.user.id,
+      { url: 'https://example.com/photo.jpg' }
+    )
+    ```
+  </Tab>
+  <Tab title="Buffer">
+    ```typescript
+    import { readFileSync } from 'fs'
+    
+    const imageBuffer = readFileSync('./photo.jpg')
+    await sock.updateProfilePicture(
+      sock.user.id,
+      imageBuffer
+    )
+    ```
+  </Tab>
+  <Tab title="Stream">
+    ```typescript
+    import { createReadStream } from 'fs'
+    
+    const imageStream = createReadStream('./photo.jpg')
+    await sock.updateProfilePicture(
+      sock.user.id,
+      { stream: imageStream }
+    )
+    ```
+  </Tab>
+</Tabs>
+
+### Custom Dimensions
+
+You can specify custom dimensions for the profile picture:
+
+```typescript
+await sock.updateProfilePicture(
+  sock.user.id,
+  { url: './photo.jpg' },
+  { width: 640, height: 640 }
+)
+```
+
+## Remove Profile Picture
+
+Remove your profile picture or a group's profile picture.
+
+### Remove Your Profile Picture
+
+```typescript
+await sock.removeProfilePicture(sock.user.id)
+```
+
+### Remove Group Profile Picture
+
+```typescript
+const groupJid = '123456789@g.us'
+await sock.removeProfilePicture(groupJid)
+```
+
+## Fetch Profile Picture
+
+Retrieve the profile picture URL for any user or group.
+
+### Get Low Resolution Preview
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+const ppUrl = await sock.profilePictureUrl(jid)
+console.log('Profile picture URL:', ppUrl)
+```
+
+### Get High Resolution Image
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+const ppUrl = await sock.profilePictureUrl(jid, 'image')
+console.log('High-res profile picture URL:', ppUrl)
+```
+
+### For Groups
+
+```typescript
+const groupJid = '123456789@g.us'
+const groupPpUrl = await sock.profilePictureUrl(groupJid, 'image')
+console.log('Group profile picture:', groupPpUrl)
+```
+
+### Handle Missing Profile Pictures
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+
+try {
+  const ppUrl = await sock.profilePictureUrl(jid)
+  console.log('Profile picture:', ppUrl)
+} catch (error) {
+  console.log('User has no profile picture')
+}
+```
+
+## Complete Profile Management Example
+
+Here's a complete example showing how to manage profile information:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+import { readFileSync } from 'fs'
+
+const sock = makeWASocket({
+  // your config
+})
+
+sock.ev.on('connection.update', async (update) => {
+  if (update.connection === 'open') {
+    console.log('Connected! Updating profile...')
+    
+    // Update profile name
+    await sock.updateProfileName('Bot Assistant')
+    console.log('Profile name updated')
+    
+    // Update status message
+    await sock.updateProfileStatus('Powered by Baileys 🤖')
+    console.log('Status updated')
+    
+    // Update profile picture
+    await sock.updateProfilePicture(
+      sock.user.id,
+      { url: './bot-avatar.jpg' }
+    )
+    console.log('Profile picture updated')
+    
+    // Fetch our own profile picture to verify
+    const myPpUrl = await sock.profilePictureUrl(sock.user.id, 'image')
+    console.log('My profile picture URL:', myPpUrl)
+  }
+})
+```
+
+## Download and Save Profile Pictures
+
+Download profile pictures from other users:
+
+```typescript
+import { writeFileSync } from 'fs'
+import fetch from 'node-fetch'
+
+async function downloadProfilePicture(jid: string, filename: string) {
+  try {
+    // Get high-res profile picture URL
+    const url = await sock.profilePictureUrl(jid, 'image')
+    
+    if (url) {
+      // Download the image
+      const response = await fetch(url)
+      const buffer = await response.buffer()
+      
+      // Save to file
+      writeFileSync(filename, buffer)
+      console.log(`Profile picture saved to ${filename}`)
+    }
+  } catch (error) {
+    console.log('Failed to download profile picture:', error.message)
+  }
+}
+
+// Usage
+await downloadProfilePicture('1234567890@s.whatsapp.net', 'user-profile.jpg')
+```
+
+## Update Group Profile
+
+Manage group profile information (requires admin privileges):
+
+```typescript
+const groupJid = '123456789@g.us'
+
+// Update group name
+await sock.groupUpdateSubject(groupJid, 'New Group Name')
+
+// Update group description
+await sock.groupUpdateDescription(groupJid, 'This is our group description')
+
+// Update group profile picture
+await sock.updateProfilePicture(
+  groupJid,
+  { url: './group-avatar.jpg' }
+)
+
+// Remove group profile picture
+await sock.removeProfilePicture(groupJid)
+```
+
+## Profile Update Events
+
+Listen for profile picture changes of your contacts:
+
+```typescript
+sock.ev.on('contacts.update', async (updates) => {
+  for (const contact of updates) {
+    if (typeof contact.imgUrl !== 'undefined') {
+      const newUrl = contact.imgUrl === null
+        ? null
+        : await sock.profilePictureUrl(contact.id).catch(() => null)
+      
+      console.log(`${contact.id} has a new profile picture:`, newUrl)
+    }
+  }
+})
+```
+
+## Error Handling
+
+Always handle potential errors when updating profile information:
+
+```typescript
+try {
+  await sock.updateProfileName('New Name')
+  console.log('Profile name updated successfully')
+} catch (error) {
+  console.error('Failed to update profile name:', error.message)
+}
+
+try {
+  await sock.updateProfilePicture(
+    sock.user.id,
+    { url: './invalid-image.jpg' }
+  )
+} catch (error) {
+  console.error('Failed to update profile picture:', error.message)
+}
+```
+
+<Warning>
+Make sure images are in a supported format (JPEG, PNG) and have reasonable dimensions. Very large images may fail to upload.
+</Warning>

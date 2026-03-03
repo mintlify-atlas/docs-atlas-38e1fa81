@@ -1,0 +1,329 @@
+---
+title: 'Privacy Settings'
+description: 'Methods for managing WhatsApp privacy settings'
+---
+
+This page documents all privacy-related methods available in the Baileys WhatsApp API.
+
+## Fetch Privacy Settings
+
+### fetchPrivacySettings
+
+Fetch your current privacy settings.
+
+<ParamField path="force" type="boolean" default={false}>
+  Whether to force fetch from server (bypassing cache)
+</ParamField>
+
+<ResponseField name="return" type="Promise<{ [key: string]: string }>">
+  Returns an object with privacy settings:
+  - `last`: Last seen privacy
+  - `online`: Online status privacy
+  - `profile`: Profile picture privacy
+  - `status`: Status privacy
+  - `readreceipts`: Read receipts setting
+  - `groupadd`: Who can add you to groups
+  - `calladd`: Who can call you
+  - `messages`: Who can message you
+</ResponseField>
+
+```typescript
+const settings = await sock.fetchPrivacySettings()
+console.log('Last seen:', settings.last)
+console.log('Profile picture:', settings.profile)
+console.log('Read receipts:', settings.readreceipts)
+```
+
+## Block Management
+
+### fetchBlocklist
+
+Fetch the list of blocked contacts.
+
+<ResponseField name="return" type="Promise<string[]>">
+  Returns an array of blocked JIDs
+</ResponseField>
+
+```typescript
+const blocked = await sock.fetchBlocklist()
+console.log('Blocked contacts:', blocked)
+```
+
+### updateBlockStatus
+
+Block or unblock a contact.
+
+<ParamField path="jid" type="string" required>
+  The JID of the contact
+</ParamField>
+
+<ParamField path="action" type="'block' | 'unblock'" required>
+  Whether to block or unblock
+</ParamField>
+
+```typescript
+// Block a contact
+await sock.updateBlockStatus('1234567890@s.whatsapp.net', 'block')
+
+// Unblock a contact
+await sock.updateBlockStatus('1234567890@s.whatsapp.net', 'unblock')
+```
+
+## Last Seen Privacy
+
+### updateLastSeenPrivacy
+
+Control who can see your last seen timestamp.
+
+<ParamField path="value" type="WAPrivacyValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can see
+  - `'contacts'`: Only contacts can see
+  - `'contact_blacklist'`: Contacts except blocked
+  - `'none'`: Nobody can see
+</ParamField>
+
+```typescript
+// Everyone can see
+await sock.updateLastSeenPrivacy('all')
+
+// Only contacts
+await sock.updateLastSeenPrivacy('contacts')
+
+// Nobody
+await sock.updateLastSeenPrivacy('none')
+```
+
+## Online Status Privacy
+
+### updateOnlinePrivacy
+
+Control who can see when you're online.
+
+<ParamField path="value" type="WAPrivacyOnlineValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can see
+  - `'match_last_seen'`: Same as last seen setting
+</ParamField>
+
+```typescript
+// Everyone can see online status
+await sock.updateOnlinePrivacy('all')
+
+// Match last seen setting
+await sock.updateOnlinePrivacy('match_last_seen')
+```
+
+## Profile Picture Privacy
+
+### updateProfilePicturePrivacy
+
+Control who can see your profile picture.
+
+<ParamField path="value" type="WAPrivacyValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can see
+  - `'contacts'`: Only contacts can see
+  - `'contact_blacklist'`: Contacts except blocked
+  - `'none'`: Nobody can see
+</ParamField>
+
+```typescript
+// Everyone can see
+await sock.updateProfilePicturePrivacy('all')
+
+// Only contacts
+await sock.updateProfilePicturePrivacy('contacts')
+
+// Nobody
+await sock.updateProfilePicturePrivacy('none')
+```
+
+## Status Privacy
+
+### updateStatusPrivacy
+
+Control who can see your status updates.
+
+<ParamField path="value" type="WAPrivacyValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can see
+  - `'contacts'`: Only contacts can see
+  - `'contact_blacklist'`: Contacts except blocked
+  - `'none'`: Nobody can see
+</ParamField>
+
+```typescript
+// Everyone can see
+await sock.updateStatusPrivacy('all')
+
+// Only contacts
+await sock.updateStatusPrivacy('contacts')
+
+// Nobody
+await sock.updateStatusPrivacy('none')
+```
+
+## Read Receipts
+
+### updateReadReceiptsPrivacy
+
+Control whether to send read receipts (blue ticks).
+
+<ParamField path="value" type="WAReadReceiptsValue" required>
+  Privacy setting:
+  - `'all'`: Send read receipts
+  - `'none'`: Don't send read receipts
+</ParamField>
+
+```typescript
+// Enable read receipts
+await sock.updateReadReceiptsPrivacy('all')
+
+// Disable read receipts
+await sock.updateReadReceiptsPrivacy('none')
+```
+
+<Note>
+Disabling read receipts means you also won't see when others read your messages (with some exceptions for group chats).
+</Note>
+
+## Group Privacy
+
+### updateGroupsAddPrivacy
+
+Control who can add you to groups.
+
+<ParamField path="value" type="WAPrivacyGroupAddValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can add you
+  - `'contacts'`: Only contacts can add you
+  - `'contact_blacklist'`: Contacts except blocked can add you
+</ParamField>
+
+```typescript
+// Everyone can add
+await sock.updateGroupsAddPrivacy('all')
+
+// Only contacts can add
+await sock.updateGroupsAddPrivacy('contacts')
+```
+
+## Call Privacy
+
+### updateCallPrivacy
+
+Control who can call you.
+
+<ParamField path="value" type="WAPrivacyCallValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can call
+  - `'known'`: Only known contacts can call
+</ParamField>
+
+```typescript
+// Everyone can call
+await sock.updateCallPrivacy('all')
+
+// Only known contacts
+await sock.updateCallPrivacy('known')
+```
+
+## Messages Privacy
+
+### updateMessagesPrivacy
+
+Control who can message you.
+
+<ParamField path="value" type="WAPrivacyMessagesValue" required>
+  Privacy setting:
+  - `'all'`: Everyone can message
+  - `'contacts'`: Only contacts can message
+</ParamField>
+
+```typescript
+// Everyone can message
+await sock.updateMessagesPrivacy('all')
+
+// Only contacts can message
+await sock.updateMessagesPrivacy('contacts')
+```
+
+## Complete Privacy Setup Example
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({ /* auth config */ })
+
+// Set all privacy settings at once
+async function setupPrivacy() {
+  // Fetch current settings
+  const current = await sock.fetchPrivacySettings()
+  console.log('Current settings:', current)
+
+  // Configure privacy
+  await sock.updateLastSeenPrivacy('contacts')
+  await sock.updateOnlinePrivacy('match_last_seen')
+  await sock.updateProfilePicturePrivacy('contacts')
+  await sock.updateStatusPrivacy('contacts')
+  await sock.updateReadReceiptsPrivacy('all')
+  await sock.updateGroupsAddPrivacy('contacts')
+  await sock.updateCallPrivacy('known')
+  await sock.updateMessagesPrivacy('contacts')
+
+  // Block unwanted contacts
+  await sock.updateBlockStatus('spam@s.whatsapp.net', 'block')
+
+  console.log('Privacy settings updated!')
+}
+
+setupPrivacy().catch(console.error)
+```
+
+## Privacy Types Reference
+
+### WAPrivacyValue
+
+Used for: Last Seen, Profile Picture, Status
+
+- `'all'` - Everyone
+- `'contacts'` - My contacts
+- `'contact_blacklist'` - My contacts except...
+- `'none'` - Nobody
+
+### WAPrivacyOnlineValue
+
+Used for: Online Status
+
+- `'all'` - Everyone
+- `'match_last_seen'` - Same as Last Seen
+
+### WAPrivacyGroupAddValue
+
+Used for: Group Add Permission
+
+- `'all'` - Everyone
+- `'contacts'` - My contacts
+- `'contact_blacklist'` - My contacts except...
+
+### WAPrivacyCallValue
+
+Used for: Call Permission
+
+- `'all'` - Everyone
+- `'known'` - My contacts
+
+### WAPrivacyMessagesValue
+
+Used for: Message Permission
+
+- `'all'` - Everyone
+- `'contacts'` - My contacts
+
+### WAReadReceiptsValue
+
+Used for: Read Receipts
+
+- `'all'` - Send read receipts
+- `'none'` - Don't send read receipts

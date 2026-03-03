@@ -1,0 +1,262 @@
+---
+title: 'Downloading Media'
+description: 'Download images, videos, and audio from WhatsApp messages'
+---
+
+When you receive media messages, they contain encrypted URLs that you need to decrypt and download. Baileys provides the `downloadMediaMessage` function to handle this automatically.
+
+## Basic Download
+
+Use the `downloadMediaMessage` function to download media from any message:
+
+```ts
+import { downloadMediaMessage, getContentType } from '@whiskeysockets/baileys'
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  const msg = messages[0]
+  if (!msg.message) return
+  
+  const messageType = getContentType(msg.message)
+  
+  if (messageType === 'imageMessage') {
+    // Download as buffer
+    const buffer = await downloadMediaMessage(
+      msg,
+      'buffer',
+      {},
+      {
+        logger,
+        reuploadRequest: sock.updateMediaMessage
+      }
+    )
+    
+    console.log('Downloaded image, size:', buffer.length)
+  }
+})
+```
+
+## Download as Stream
+
+For large media files, download as a stream to avoid loading everything into memory:
+
+```ts
+import { createWriteStream } from 'fs'
+import { downloadMediaMessage } from '@whiskeysockets/baileys'
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  const msg = messages[0]
+  if (!msg.message) return
+  
+  const messageType = getContentType(msg.message)
+  
+  if (messageType === 'imageMessage') {
+    // Download as stream
+    const stream = await downloadMediaMessage(
+      msg,
+      'stream',
+      {},
+      {
+        logger,
+        reuploadRequest: sock.updateMediaMessage
+      }
+    )
+    
+    // Save to file
+    const writeStream = createWriteStream('./my-download.jpeg')
+    stream.pipe(writeStream)
+    
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve)
+      writeStream.on('error', reject)
+    })
+    
+    console.log('Saved image to file')
+  }
+})
+```
+
+<Note>
+  Using streams is more memory-efficient for large files like videos.
+</Note>
+
+## Handle All Media Types
+
+<Steps>
+  <Step title="Detect message type">
+    ```ts
+    import { getContentType } from '@whiskeysockets/baileys'
+    
+    const messageType = getContentType(msg.message)
+    ```
+  </Step>
+  
+  <Step title="Download based on type">
+    ```ts
+    const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage']
+    
+    if (mediaTypes.includes(messageType)) {
+      const buffer = await downloadMediaMessage(
+        msg,
+        'buffer',
+        {},
+        {
+          logger,
+          reuploadRequest: sock.updateMediaMessage
+        }
+      )
+      
+      // Process the media
+      console.log(`Downloaded ${messageType}, size: ${buffer.length}`)
+    }
+    ```
+  </Step>
+</Steps>
+
+## Save to File
+
+Here's a complete example that saves media to disk:
+
+```ts
+import { createWriteStream } from 'fs'
+import { downloadMediaMessage, getContentType } from '@whiskeysockets/baileys'
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  for (const msg of messages) {
+    if (!msg.message) continue
+    
+    const messageType = getContentType(msg.message)
+    
+    // Check if it's a media message
+    if (messageType === 'imageMessage') {
+      // Download the message
+      const stream = await downloadMediaMessage(
+        msg,
+        'stream',
+        {},
+        {
+          logger,
+          // Pass this so that Baileys can request a reupload of media
+          // that has been deleted
+          reuploadRequest: sock.updateMediaMessage
+        }
+      )
+      
+      // Save to file
+      const writeStream = createWriteStream('./downloads/image.jpeg')
+      stream.pipe(writeStream)
+      
+      console.log('Image saved successfully')
+    }
+  }
+})
+```
+
+## Handle Deleted Media
+
+WhatsApp automatically removes old media from their servers. If media is deleted, you can request a re-upload:
+
+```ts
+const buffer = await downloadMediaMessage(
+  msg,
+  'buffer',
+  {},
+  {
+    logger,
+    // This function requests the phone to re-upload the media
+    reuploadRequest: sock.updateMediaMessage
+  }
+)
+```
+
+<Warning>
+  Always pass `reuploadRequest: sock.updateMediaMessage` to handle deleted media gracefully.
+</Warning>
+
+## Get Media Extension
+
+You can determine the file extension from the message:
+
+```ts
+import { extensionForMediaMessage } from '@whiskeysockets/baileys'
+
+const extension = extensionForMediaMessage(msg.message)
+console.log('File extension:', extension) // e.g., '.jpeg'
+```
+
+## Download Options
+
+The `downloadMediaMessage` function accepts these parameters:
+
+- `message` - The WAMessage object
+- `type` - Either `'buffer'` or `'stream'`
+- `options` - Download options (optional)
+- `ctx` - Context object with logger and reuploadRequest
+
+```ts
+const stream = await downloadMediaMessage(
+  msg,
+  'stream',
+  {
+    startByte: 0,      // Optional: start byte for partial download
+    endByte: 1024      // Optional: end byte for partial download
+  },
+  {
+    logger,
+    reuploadRequest: sock.updateMediaMessage
+  }
+)
+```
+
+## Complete Example
+
+```ts
+import makeWASocket, { downloadMediaMessage, getContentType } from '@whiskeysockets/baileys'
+import { createWriteStream } from 'fs'
+import { mkdir } from 'fs/promises'
+
+const sock = makeWASocket({ /* ... */ })
+
+// Create downloads directory
+await mkdir('./downloads', { recursive: true })
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+  for (const msg of messages) {
+    if (!msg.message) continue
+    
+    const messageType = getContentType(msg.message)
+    const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage']
+    
+    if (mediaTypes.includes(messageType)) {
+      try {
+        // Download as stream
+        const stream = await downloadMediaMessage(
+          msg,
+          'stream',
+          {},
+          {
+            logger,
+            reuploadRequest: sock.updateMediaMessage
+          }
+        )
+        
+        // Determine file extension
+        const extension = extensionForMediaMessage(msg.message)
+        const fileName = `./downloads/${msg.key.id}${extension}`
+        
+        // Save to file
+        const writeStream = createWriteStream(fileName)
+        stream.pipe(writeStream)
+        
+        await new Promise((resolve, reject) => {
+          writeStream.on('finish', resolve)
+          writeStream.on('error', reject)
+        })
+        
+        console.log(`Downloaded ${messageType} to ${fileName}`)
+      } catch (error) {
+        console.error('Failed to download media:', error)
+      }
+    }
+  }
+})
+```

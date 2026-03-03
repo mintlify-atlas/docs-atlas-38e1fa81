@@ -1,0 +1,238 @@
+---
+title: 'Poll Votes'
+description: 'Decrypt and handle votes on WhatsApp poll messages'
+---
+
+Poll votes are encrypted by default and arrive through the `messages.update` event. You need to decrypt them using the original poll creation message to see the aggregated votes.
+
+## How Poll Votes Work
+
+When someone votes on a poll:
+
+1. WhatsApp sends an encrypted vote update via `messages.update`
+2. The update contains `pollUpdates` with encrypted vote data
+3. You decrypt the votes using the original poll creation message
+4. You get aggregated vote counts per option
+
+## Basic Poll Vote Handling
+
+<Steps>
+  <Step title="Listen for messages.update">
+    ```ts
+    sock.ev.on('messages.update', (updates) => {
+      for (const { key, update } of updates) {
+        if (update.pollUpdates) {
+          // Handle poll votes
+        }
+      }
+    })
+    ```
+  </Step>
+  
+  <Step title="Get the original poll message">
+    ```ts
+    // You need to implement getMessage to retrieve stored messages
+    const pollCreation = await getMessage(key)
+    ```
+  </Step>
+  
+  <Step title="Decrypt the votes">
+    ```ts
+    import { getAggregateVotesInPollMessage } from '@whiskeysockets/baileys'
+    
+    const aggregatedVotes = getAggregateVotesInPollMessage({
+      message: pollCreation,
+      pollUpdates: update.pollUpdates
+    })
+    
+    console.log('Poll votes:', aggregatedVotes)
+    ```
+  </Step>
+</Steps>
+
+## Complete Example
+
+```ts
+import makeWASocket, { getAggregateVotesInPollMessage } from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+  // getMessage is required to decrypt poll votes
+  getMessage: async (key) => {
+    // Implement your storage retrieval logic here
+    return await getMessageFromStore(key)
+  }
+})
+
+sock.ev.on('messages.update', async (updates) => {
+  for (const { key, update } of updates) {
+    if (update.pollUpdates) {
+      // Get the original poll creation message
+      const pollCreation = await getMessage(key)
+      
+      if (pollCreation) {
+        const aggregatedVotes = getAggregateVotesInPollMessage({
+          message: pollCreation,
+          pollUpdates: update.pollUpdates
+        })
+        
+        console.log('got poll update, aggregation:', aggregatedVotes)
+      }
+    }
+  }
+})
+```
+
+<Warning>
+  You must configure `getMessage` in your socket config to decrypt poll votes. Without it, you cannot access vote data.
+</Warning>
+
+## Implementing getMessage
+
+You need to implement `getMessage` to retrieve stored messages. This is crucial for poll vote decryption:
+
+```ts
+import { proto, WAMessageKey, WAMessageContent } from '@whiskeysockets/baileys'
+
+// Simple in-memory store (use a database in production)
+const messageStore = new Map<string, proto.IMessage>()
+
+// Store messages when they arrive
+sock.ev.on('messages.upsert', ({ messages }) => {
+  for (const msg of messages) {
+    const key = `${msg.key.remoteJid}_${msg.key.id}`
+    messageStore.set(key, msg.message!)
+  }
+})
+
+// Retrieve messages for poll decryption
+async function getMessage(key: WAMessageKey): Promise<WAMessageContent | undefined> {
+  const messageKey = `${key.remoteJid}_${key.id}`
+  return messageStore.get(messageKey)
+}
+
+const sock = makeWASocket({
+  getMessage
+})
+```
+
+<Note>
+  In production, use a persistent database instead of an in-memory Map.
+</Note>
+
+## Understanding Poll Updates
+
+The `pollUpdates` field contains an array of encrypted vote objects:
+
+```ts
+sock.ev.on('messages.update', (updates) => {
+  for (const { key, update } of updates) {
+    if (update.pollUpdates) {
+      console.log('Raw poll updates:', update.pollUpdates)
+      // These are encrypted and need the original message to decrypt
+    }
+  }
+})
+```
+
+## Aggregated Vote Format
+
+The `getAggregateVotesInPollMessage` function returns vote counts per option:
+
+```ts
+const aggregatedVotes = getAggregateVotesInPollMessage({
+  message: pollCreation,
+  pollUpdates: update.pollUpdates
+})
+
+// aggregatedVotes structure:
+// [
+//   {
+//     name: 'Option 1',
+//     voters: ['1234567890@s.whatsapp.net']
+//   },
+//   {
+//     name: 'Option 2',
+//     voters: ['0987654321@s.whatsapp.net', '1111111111@s.whatsapp.net']
+//   }
+// ]
+
+console.log(`Option 1 has ${aggregatedVotes[0].voters.length} votes`)
+```
+
+## Socket Configuration
+
+To decrypt poll votes and improve retry handling, configure your socket with `getMessage`:
+
+```ts
+const sock = makeWASocket({
+  getMessage: async (key) => {
+    // Retrieve from your storage
+    return await getMessageFromStore(key)
+  }
+})
+```
+
+<Note>
+  The `getMessage` function is also used to improve message retry on encryption/decryption failures.
+</Note>
+
+## Complete Working Example
+
+```ts
+import makeWASocket, {
+  getAggregateVotesInPollMessage,
+  proto,
+  WAMessageKey,
+  WAMessageContent
+} from '@whiskeysockets/baileys'
+
+// Message store (use database in production)
+const messages = new Map<string, proto.IMessage>()
+
+function makeMessageKey(key: WAMessageKey): string {
+  return `${key.remoteJid}_${key.id}`
+}
+
+async function getMessage(key: WAMessageKey): Promise<WAMessageContent | undefined> {
+  return messages.get(makeMessageKey(key))
+}
+
+const sock = makeWASocket({
+  getMessage
+})
+
+// Store all incoming messages
+sock.ev.on('messages.upsert', ({ messages: msgs }) => {
+  for (const msg of msgs) {
+    if (msg.message) {
+      messages.set(makeMessageKey(msg.key), msg.message)
+    }
+  }
+})
+
+// Handle poll votes
+sock.ev.on('messages.update', async (updates) => {
+  for (const { key, update } of updates) {
+    if (update.pollUpdates) {
+      const pollCreation = await getMessage(key)
+      
+      if (pollCreation) {
+        const aggregatedVotes = getAggregateVotesInPollMessage({
+          message: pollCreation,
+          pollUpdates: update.pollUpdates
+        })
+        
+        console.log('Poll Update Received:')
+        console.log('Poll ID:', key.id)
+        
+        for (const option of aggregatedVotes) {
+          console.log(`- ${option.name}: ${option.voters.length} votes`)
+          console.log(`  Voters: ${option.voters.join(', ')}`)
+        }
+      } else {
+        console.log('Could not find poll creation message for', key.id)
+      }
+    }
+  }
+})
+```

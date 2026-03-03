@@ -1,0 +1,356 @@
+---
+title: 'Message Options'
+description: 'Configuration options for sending messages'
+---
+
+## MiscMessageGenerationOptions
+
+Options that can be passed when sending messages to control various aspects like quoting, ephemeral messages, timestamps, and more.
+
+```typescript
+type MiscMessageGenerationOptions = MinimalRelayOptions & {
+  timestamp?: Date
+  quoted?: WAMessage
+  ephemeralExpiration?: number | string
+  mediaUploadTimeoutMs?: number
+  statusJidList?: string[]
+  backgroundColor?: string
+  font?: number
+  broadcast?: boolean
+}
+```
+
+---
+
+## Core Options
+
+### timestamp
+
+<ParamField body="timestamp" type="Date">
+  Optional custom timestamp for the message. If not provided, current time is used.
+</ParamField>
+
+**Example:**
+```javascript
+await sock.sendMessage(jid, { text: 'Hello' }, {
+  timestamp: new Date('2024-01-01T12:00:00Z')
+})
+```
+
+### quoted
+
+<ParamField body="quoted" type="WAMessage">
+  The message you want to quote/reply to. Pass the full `WAMessage` object.
+</ParamField>
+
+**Example:**
+```javascript
+// Quote/reply to a message
+await sock.sendMessage(jid, 
+  { text: 'This is a reply' }, 
+  { quoted: originalMessage }
+)
+```
+
+**Type Reference:**
+```typescript
+type WAMessage = proto.IWebMessageInfo & {
+  key: WAMessageKey
+  messageStubParameters?: any
+  category?: string
+  retryCount?: number
+}
+```
+
+### ephemeralExpiration
+
+<ParamField body="ephemeralExpiration" type="number | string">
+  Disappearing message expiration time in seconds. Common values:
+  - `86400` - 24 hours
+  - `604800` - 7 days (default)
+  - `7776000` - 90 days
+  - `0` - Disable disappearing messages
+</ParamField>
+
+**Example:**
+```javascript
+// Send a message that disappears after 24 hours
+await sock.sendMessage(jid, 
+  { text: 'Secret message' }, 
+  { ephemeralExpiration: 86400 }
+)
+
+// Disable disappearing messages for this message
+await sock.sendMessage(jid, 
+  { text: 'Permanent message' }, 
+  { ephemeralExpiration: 0 }
+)
+```
+
+**Note:** The default ephemeral expiration is defined as:
+```typescript
+const WA_DEFAULT_EPHEMERAL = 7 * 24 * 60 * 60 // 7 days
+```
+
+### mediaUploadTimeoutMs
+
+<ParamField body="mediaUploadTimeoutMs" type="number">
+  Timeout in milliseconds for uploading media to WhatsApp servers. Default is 30000ms (30 seconds).
+</ParamField>
+
+**Example:**
+```javascript
+// Increase timeout for large media files
+await sock.sendMessage(jid, {
+  video: fs.readFileSync('large-video.mp4')
+}, {
+  mediaUploadTimeoutMs: 60000 // 60 seconds
+})
+```
+
+---
+
+## Status & Broadcast Options
+
+### statusJidList
+
+<ParamField body="statusJidList" type="string[]">
+  Array of JIDs to send status messages to. Used when sending to `status@broadcast`.
+</ParamField>
+
+**Example:**
+```javascript
+// Send status to specific contacts
+await sock.sendMessage('status@broadcast', {
+  text: 'My status update'
+}, {
+  statusJidList: [
+    '1234567890@s.whatsapp.net',
+    '0987654321@s.whatsapp.net'
+  ]
+})
+```
+
+### backgroundColor
+
+<ParamField body="backgroundColor" type="string">
+  Background color for status messages (hex color code).
+</ParamField>
+
+**Example:**
+```javascript
+await sock.sendMessage('status@broadcast', {
+  text: 'Colorful status'
+}, {
+  backgroundColor: '#FF5733',
+  statusJidList: ['1234567890@s.whatsapp.net']
+})
+```
+
+### font
+
+<ParamField body="font" type="number">
+  Font type/style for status messages. WhatsApp supports different font styles for text statuses.
+</ParamField>
+
+**Example:**
+```javascript
+await sock.sendMessage('status@broadcast', {
+  text: 'Status with custom font'
+}, {
+  font: 2,
+  backgroundColor: '#000000',
+  statusJidList: ['1234567890@s.whatsapp.net']
+})
+```
+
+### broadcast
+
+<ParamField body="broadcast" type="boolean">
+  Whether this message is a broadcast message.
+</ParamField>
+
+**Example:**
+```javascript
+await sock.sendMessage('1234567890@s.whatsapp.net', {
+  text: 'Broadcast message'
+}, {
+  broadcast: true
+})
+```
+
+---
+
+## Relay Options
+
+### messageId
+
+<ParamField body="messageId" type="string">
+  Override the auto-generated message ID with a custom ID.
+</ParamField>
+
+**Example:**
+```javascript
+await sock.sendMessage(jid, 
+  { text: 'Custom ID message' }, 
+  { messageId: 'MY_CUSTOM_MESSAGE_ID_12345' }
+)
+```
+
+### useCachedGroupMetadata
+
+<ParamField body="useCachedGroupMetadata" type="boolean" default="true">
+  Whether to use cached group metadata or fetch fresh from the server.
+</ParamField>
+
+**Example:**
+```javascript
+// Force fresh group metadata fetch
+await sock.sendMessage(groupJid, 
+  { text: 'Group message' }, 
+  { useCachedGroupMetadata: false }
+)
+```
+
+---
+
+## MinimalRelayOptions
+
+Base options inherited by `MiscMessageGenerationOptions`.
+
+```typescript
+type MinimalRelayOptions = {
+  messageId?: string
+  useCachedGroupMetadata?: boolean
+}
+```
+
+---
+
+## MessageRelayOptions
+
+Extended relay options used internally for message relay operations.
+
+```typescript
+type MessageRelayOptions = MinimalRelayOptions & {
+  participant?: { jid: string; count: number }
+  additionalAttributes?: { [_: string]: string }
+  additionalNodes?: BinaryNode[]
+  useUserDevicesCache?: boolean
+  statusJidList?: string[]
+}
+```
+
+### participant
+
+<ParamField body="participant" type="{ jid: string; count: number }">
+  Send only to a specific participant. Used when message decryption fails for a single user.
+</ParamField>
+
+<ParamField body="participant.jid" type="string" required>
+  JID of the specific participant
+</ParamField>
+
+<ParamField body="participant.count" type="number" required>
+  Retry count for this participant
+</ParamField>
+
+### additionalAttributes
+
+<ParamField body="additionalAttributes" type="{ [key: string]: string }">
+  Additional attributes to add to the WA binary node.
+</ParamField>
+
+### additionalNodes
+
+<ParamField body="additionalNodes" type="BinaryNode[]">
+  Additional binary nodes to include in the message.
+</ParamField>
+
+### useUserDevicesCache
+
+<ParamField body="useUserDevicesCache" type="boolean" default="true">
+  Whether to use the devices cache or fetch fresh from the server.
+</ParamField>
+
+---
+
+## Usage Example
+
+Complete example showing multiple options:
+
+```javascript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({ /* auth config */ })
+
+// Send a quoted message with ephemeral expiration
+const sentMsg = await sock.sendMessage(
+  '1234567890@s.whatsapp.net',
+  {
+    text: 'This is a reply that will disappear',
+    mentions: ['0987654321@s.whatsapp.net']
+  },
+  {
+    // Quote the original message
+    quoted: originalMessage,
+    
+    // Make it disappear after 24 hours
+    ephemeralExpiration: 86400,
+    
+    // Custom timestamp
+    timestamp: new Date(),
+    
+    // Custom message ID
+    messageId: 'custom_id_123',
+    
+    // Force fresh group metadata
+    useCachedGroupMetadata: false
+  }
+)
+
+console.log('Message sent:', sentMsg.key.id)
+```
+
+## Status Message Example
+
+```javascript
+// Send a styled status update to specific contacts
+await sock.sendMessage(
+  'status@broadcast',
+  {
+    text: '🎉 Check out my new status!'
+  },
+  {
+    backgroundColor: '#4A90E2',
+    font: 3,
+    statusJidList: [
+      '1234567890@s.whatsapp.net',
+      '0987654321@s.whatsapp.net',
+      '1122334455@s.whatsapp.net'
+    ]
+  }
+)
+```
+
+## Media Upload Example
+
+```javascript
+import fs from 'fs'
+
+// Send large video with extended timeout
+await sock.sendMessage(
+  jid,
+  {
+    video: fs.readFileSync('large-video.mp4'),
+    caption: 'Check out this video!'
+  },
+  {
+    // Extend timeout for large file
+    mediaUploadTimeoutMs: 120000, // 2 minutes
+    
+    // Quote another message
+    quoted: previousMessage
+  }
+)
+```

@@ -1,0 +1,269 @@
+---
+title: 'Authentication Utilities'
+description: 'Authentication state management and signal store utilities'
+icon: 'key'
+---
+
+## Authentication State
+
+### useMultiFileAuthState
+
+Stores the full authentication state in a multi-file folder structure. More efficient than single-file storage.
+
+```typescript
+function useMultiFileAuthState(
+  folder: string
+): Promise<{
+  state: AuthenticationState
+  saveCreds: () => Promise<void>
+}>
+```
+
+<ParamField path="folder" type="string" required>
+  Path to the folder where authentication files will be stored
+</ParamField>
+
+<ResponseField name="state" type="AuthenticationState">
+  The authentication state object containing credentials and keys
+  
+  <Expandable title="properties">
+    <ResponseField name="creds" type="AuthenticationCreds">
+      Authentication credentials including identity keys and registration ID
+    </ResponseField>
+    
+    <ResponseField name="keys" type="SignalKeyStore">
+      Signal protocol key store for managing pre-keys, sessions, and app state
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="saveCreds" type="() => Promise<void>">
+  Function to save the current credentials to disk
+</ResponseField>
+
+<Warning>
+  This implementation is intended for development and bot use cases. For production applications, implement a custom auth state using a proper SQL or NoSQL database.
+</Warning>
+
+**Example:**
+```typescript
+const { state, saveCreds } = await useMultiFileAuthState('./auth_info')
+
+const sock = makeWASocket({
+  auth: state
+})
+
+// Save credentials whenever they update
+sock.ev.on('creds.update', saveCreds)
+```
+
+---
+
+## Signal Store Utilities
+
+### makeCacheableSignalKeyStore
+
+Adds in-memory caching capability to a SignalKeyStore for improved performance.
+
+```typescript
+function makeCacheableSignalKeyStore(
+  store: SignalKeyStore,
+  logger?: ILogger,
+  cache?: CacheStore
+): SignalKeyStore
+```
+
+<ParamField path="store" type="SignalKeyStore" required>
+  The base signal key store to add caching to
+</ParamField>
+
+<ParamField path="logger" type="ILogger">
+  Optional logger for trace events
+</ParamField>
+
+<ParamField path="cache" type="CacheStore">
+  Optional custom cache store (defaults to NodeCache with 5-minute TTL)
+</ParamField>
+
+<ResponseField name="return" type="SignalKeyStore">
+  A cached version of the signal key store with the same interface
+</ResponseField>
+
+**Features:**
+- Automatic cache management with configurable TTL (default: 5 minutes)
+- Mutex-based protection for cache operations
+- Falls back to underlying store for cache misses
+- Supports all standard SignalKeyStore operations
+
+**Example:**
+```typescript
+const { state } = await useMultiFileAuthState('./auth_info')
+const cachedStore = makeCacheableSignalKeyStore(
+  state.keys,
+  logger
+)
+
+// Use cachedStore for faster key lookups
+const preKeys = await cachedStore.get('pre-key', ['1', '2', '3'])
+```
+
+---
+
+### addTransactionCapability
+
+Adds database-like transaction capability to the SignalKeyStore using AsyncLocalStorage.
+
+```typescript
+function addTransactionCapability(
+  state: SignalKeyStore,
+  logger: ILogger,
+  options: TransactionCapabilityOptions
+): SignalKeyStoreWithTransaction
+```
+
+<ParamField path="state" type="SignalKeyStore" required>
+  The key store to add transaction capability to
+</ParamField>
+
+<ParamField path="logger" type="ILogger" required>
+  Logger for transaction events
+</ParamField>
+
+<ParamField path="options" type="TransactionCapabilityOptions" required>
+  Transaction configuration options
+  
+  <Expandable title="properties">
+    <ParamField path="maxCommitRetries" type="number" required>
+      Maximum number of retry attempts for commit operations
+    </ParamField>
+    
+    <ParamField path="delayBetweenTriesMs" type="number" required>
+      Delay in milliseconds between retry attempts
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="SignalKeyStoreWithTransaction">
+  Enhanced key store with transaction support
+  
+  <Expandable title="additional methods">
+    <ResponseField name="transaction" type="function">
+      Execute operations within a transaction context
+      
+      ```typescript
+      transaction<T>(work: () => Promise<T>, key: string): Promise<T>
+      ```
+    </ResponseField>
+    
+    <ResponseField name="isInTransaction" type="function">
+      Check if currently executing within a transaction
+      
+      ```typescript
+      isInTransaction(): boolean
+      ```
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Features:**
+- Automatic transaction context management with AsyncLocalStorage
+- Nested transaction support (reuses parent context)
+- Commit retry logic with configurable attempts
+- Concurrent operation queuing per signal data type
+- Automatic rollback on errors
+
+**Example:**
+```typescript
+const txStore = addTransactionCapability(
+  state.keys,
+  logger,
+  { maxCommitRetries: 3, delayBetweenTriesMs: 200 }
+)
+
+await txStore.transaction(async () => {
+  // All operations within this block are batched
+  await txStore.set({ 'pre-key': newPreKeys })
+  await txStore.set({ 'session': sessions })
+  // Committed atomically at the end
+}, 'update-keys')
+```
+
+---
+
+## Credential Management
+
+### initAuthCreds
+
+Initializes a new set of authentication credentials.
+
+```typescript
+function initAuthCreds(): AuthenticationCreds
+```
+
+<ResponseField name="return" type="AuthenticationCreds">
+  Newly generated authentication credentials
+  
+  <Expandable title="properties">
+    <ResponseField name="noiseKey" type="KeyPair">
+      Noise protocol key pair for connection encryption
+    </ResponseField>
+    
+    <ResponseField name="pairingEphemeralKeyPair" type="KeyPair">
+      Ephemeral key pair for QR code pairing
+    </ResponseField>
+    
+    <ResponseField name="signedIdentityKey" type="KeyPair">
+      Signed identity key for Signal protocol
+    </ResponseField>
+    
+    <ResponseField name="signedPreKey" type="SignedKeyPair">
+      Initial signed pre-key with signature
+    </ResponseField>
+    
+    <ResponseField name="registrationId" type="number">
+      Unique registration identifier
+    </ResponseField>
+    
+    <ResponseField name="advSecretKey" type="string">
+      Advanced secret key (base64 encoded)
+    </ResponseField>
+    
+    <ResponseField name="nextPreKeyId" type="number">
+      Next pre-key ID to generate (starts at 1)
+    </ResponseField>
+    
+    <ResponseField name="firstUnuploadedPreKeyId" type="number">
+      First pre-key ID not yet uploaded to server
+    </ResponseField>
+    
+    <ResponseField name="registered" type="boolean">
+      Whether the credentials have been registered (starts false)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```typescript
+// Initialize new credentials
+const creds = initAuthCreds()
+
+// Use with custom auth state implementation
+const authState: AuthenticationState = {
+  creds,
+  keys: myCustomKeyStore
+}
+```
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Signal Utilities" icon="shield" href="/api/crypto-utils#signal-protocol">
+    Signal protocol helpers for E2E encryption
+  </Card>
+  
+  <Card title="Socket Configuration" icon="plug" href="/api/socket">
+    Configure and initialize WhatsApp socket connections
+  </Card>
+</CardGroup>

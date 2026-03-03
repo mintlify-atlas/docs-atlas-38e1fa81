@@ -1,0 +1,308 @@
+---
+title: "Forwarding & Quoting"
+description: "Forward messages and reply with quotes"
+---
+
+## Quoting Messages
+
+Reply to any message with a quote (works with all message types):
+
+```typescript
+await sock.sendMessage(
+    jid,
+    { text: 'This is my reply' },
+    { quoted: message }
+)
+```
+
+The `quoted` option is part of `MiscMessageGenerationOptions` and works with all message types.
+
+### Quoting Different Message Types
+
+<CodeGroup>
+```typescript Text Reply
+// Quote a text message
+await sock.sendMessage(
+    jid,
+    { text: 'Thanks for the info!' },
+    { quoted: originalMessage }
+)
+```
+
+```typescript Media Reply
+// Quote while sending media
+await sock.sendMessage(
+    jid,
+    {
+        image: { url: './photo.jpg' },
+        caption: 'Here is the photo you asked for'
+    },
+    { quoted: requestMessage }
+)
+```
+
+```typescript Document Reply
+// Quote while sending a document
+await sock.sendMessage(
+    jid,
+    {
+        document: { url: './report.pdf' },
+        mimetype: 'application/pdf',
+        fileName: 'Report.pdf'
+    },
+    { quoted: message }
+)
+```
+</CodeGroup>
+
+### Getting Messages to Quote
+
+You need a `WAMessage` object to quote:
+
+1. **From events**:
+   ```typescript
+   sock.ev.on('messages.upsert', async ({ messages }) => {
+       for (const m of messages) {
+           // Quote the incoming message
+           await sock.sendMessage(
+               m.key.remoteJid!,
+               { text: 'Got your message!' },
+               { quoted: m }
+           )
+       }
+   })
+   ```
+
+2. **From store**:
+   ```typescript
+   const msg = await getMessageFromStore(jid, messageId)
+   await sock.sendMessage(
+       jid,
+       { text: 'Replying to your message' },
+       { quoted: msg }
+   )
+   ```
+
+3. **From sent messages**:
+   ```typescript
+   const sent = await sock.sendMessage(jid, { text: 'Original' })
+   
+   // Later, quote your own message
+   await sock.sendMessage(
+       jid,
+       { text: 'Follow-up' },
+       { quoted: sent }
+   )
+   ```
+
+## Forwarding Messages
+
+Forward messages to other chats with WhatsApp's native forward feature:
+
+```typescript
+const msg = getMessageFromStore() // get message from your store
+await sock.sendMessage(jid, { forward: msg })
+```
+
+### Forward with Force
+
+Force forward even if the message is not forwardable:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    { 
+        forward: msg,
+        force: true // force forward
+    }
+)
+```
+
+### Type Signature
+
+From `src/Types/Message.ts:273-276`:
+
+```typescript
+{
+    forward: WAMessage
+    force?: boolean
+}
+```
+
+## Quote vs Forward
+
+<Tabs>
+  <Tab title="Quote (Reply)">
+    **Use when**: You want to reply to a specific message in a conversation
+    
+    **How it looks**: Shows the original message above your reply
+    
+    **Example**:
+    ```typescript
+    await sock.sendMessage(
+        jid,
+        { text: 'Good question!' },
+        { quoted: originalMessage }
+    )
+    ```
+    
+    **Result**: Your message appears as a reply with the original message quoted above it.
+  </Tab>
+  <Tab title="Forward">
+    **Use when**: You want to share a message to another chat
+    
+    **How it looks**: Shows "Forwarded" label on the message
+    
+    **Example**:
+    ```typescript
+    await sock.sendMessage(
+        otherJid,
+        { forward: message }
+    )
+    ```
+    
+    **Result**: The message appears in the new chat with a "Forwarded" indicator.
+  </Tab>
+</Tabs>
+
+## Advanced Quoting
+
+### Quote with Mentions
+
+Mention users when quoting:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: '@12345678901 asked a great question',
+        mentions: ['12345678901@s.whatsapp.net']
+    },
+    { quoted: message }
+)
+```
+
+### Quote Media Messages
+
+When quoting media messages, the thumbnail is automatically included:
+
+```typescript
+sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const m of messages) {
+        // If it's an image, quote it
+        if (m.message?.imageMessage) {
+            await sock.sendMessage(
+                m.key.remoteJid!,
+                { text: 'Nice photo!' },
+                { quoted: m }
+            )
+        }
+    }
+})
+```
+
+## Message Options Reference
+
+From `src/Types/Message.ts:309-326`:
+
+```typescript
+export type MiscMessageGenerationOptions = {
+    /** override message ID */
+    messageId?: string
+    
+    /** the message you want to quote */
+    quoted?: WAMessage
+    
+    /** disappearing messages settings */
+    ephemeralExpiration?: number | string
+    
+    /** optional manual timestamp */
+    timestamp?: Date
+    
+    /** use cached group metadata */
+    useCachedGroupMetadata?: boolean
+    
+    /** media upload timeout */
+    mediaUploadTimeoutMs?: number
+    
+    /** for status/broadcast */
+    statusJidList?: string[]
+    backgroundColor?: string
+    font?: number
+    broadcast?: boolean
+}
+```
+
+## Complete Example
+
+Here's a complete example showing quoting and forwarding:
+
+```typescript
+import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+const { state, saveCreds } = await useMultiFileAuthState('auth')
+
+const sock = makeWASocket({ auth: state })
+sock.ev.on('creds.update', saveCreds)
+
+sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const m of messages) {
+        if (!m.message || m.key.fromMe) continue
+        
+        const messageText = m.message.conversation || 
+                           m.message.extendedTextMessage?.text
+        
+        // Quote reply
+        if (messageText?.toLowerCase() === 'ping') {
+            await sock.sendMessage(
+                m.key.remoteJid!,
+                { text: 'Pong!' },
+                { quoted: m }
+            )
+        }
+        
+        // Forward to another chat
+        if (messageText?.startsWith('forward:')) {
+            const targetJid = messageText.split(':')[1]?.trim() + '@s.whatsapp.net'
+            await sock.sendMessage(
+                targetJid,
+                { forward: m }
+            )
+            
+            // Confirm with quote
+            await sock.sendMessage(
+                m.key.remoteJid!,
+                { text: 'Message forwarded!' },
+                { quoted: m }
+            )
+        }
+    }
+})
+```
+
+## Context Info in Quotes
+
+When you quote a message, WhatsApp automatically includes the original message's context. You can also add additional context:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        text: 'Here is more info',
+        contextInfo: {
+            externalAdReply: {
+                title: 'Related Link',
+                body: 'Click to learn more',
+                sourceUrl: 'https://example.com'
+            }
+        }
+    },
+    { quoted: originalMessage }
+)
+```
+
+## Related
+
+- [Text Messages](/messages/sending-text) - Send basic text messages
+- [Message Types](/api/message-types) - All available message content types
+- [Data Store](/concepts/store) - Implement message storage for forwarding

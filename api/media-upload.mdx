@@ -1,0 +1,464 @@
+---
+title: 'Media Upload'
+description: 'Reference for uploading media in different formats'
+---
+
+## WAMediaUpload
+
+Union type representing the different ways to provide media for upload to WhatsApp.
+
+```typescript
+type WAMediaUpload = Buffer | WAMediaPayloadStream | WAMediaPayloadURL
+```
+
+WAMediaUpload accepts three formats:
+1. **Buffer** - Raw binary data
+2. **Stream** - Readable stream (useful for large files)
+3. **URL** - URL string or URL object pointing to the media
+
+---
+
+## Upload Formats
+
+### Buffer Upload
+
+Provide media as a raw `Buffer` object. Best for small to medium-sized files already in memory.
+
+<ParamField body="media" type="Buffer">
+  Raw binary data of the media file
+</ParamField>
+
+**Example:**
+```javascript
+import fs from 'fs'
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({ /* auth */ })
+
+// Read file into Buffer
+const imageBuffer = fs.readFileSync('./image.jpg')
+
+// Send as buffer
+await sock.sendMessage(jid, {
+  image: imageBuffer,
+  caption: 'Sent from buffer'
+})
+```
+
+**Use Cases:**
+- Small images and files
+- In-memory media processing
+- Generated content (QR codes, charts, etc.)
+
+---
+
+### Stream Upload (WAMediaPayloadStream)
+
+Provide media as a readable stream. Recommended for large files to avoid loading entire file into memory.
+
+<ParamField body="stream" type="Readable" required>
+  Node.js Readable stream containing the media data
+</ParamField>
+
+**Type Definition:**
+```typescript
+type WAMediaPayloadStream = { 
+  stream: Readable 
+}
+```
+
+**Example:**
+```javascript
+import fs from 'fs'
+import { Readable } from 'stream'
+
+const sock = makeWASocket({ /* auth */ })
+
+// Create read stream for large video file
+const videoStream = fs.createReadStream('./large-video.mp4')
+
+// Send as stream
+await sock.sendMessage(jid, {
+  video: { stream: videoStream },
+  caption: 'Large video uploaded via stream'
+})
+```
+
+**Use Cases:**
+- Large video files (>50MB)
+- Large audio files
+- Streaming from external sources
+- Memory-efficient uploads
+
+**Benefits:**
+- Lower memory usage
+- Better performance for large files
+- Supports backpressure handling
+
+---
+
+### URL Upload (WAMediaPayloadURL)
+
+Provide media as a URL. Baileys will download the file from the URL before uploading to WhatsApp.
+
+<ParamField body="url" type="URL | string" required>
+  URL pointing to the media file (can be string or URL object)
+</ParamField>
+
+**Type Definition:**
+```typescript
+type WAMediaPayloadURL = { 
+  url: URL | string 
+}
+```
+
+**Example with String URL:**
+```javascript
+const sock = makeWASocket({ /* auth */ })
+
+// Send image from URL (string)
+await sock.sendMessage(jid, {
+  image: { url: 'https://example.com/image.jpg' },
+  caption: 'Image from URL'
+})
+
+// Send document from URL
+await sock.sendMessage(jid, {
+  document: { url: 'https://example.com/document.pdf' },
+  mimetype: 'application/pdf',
+  fileName: 'document.pdf'
+})
+```
+
+**Example with URL Object:**
+```javascript
+import { URL } from 'url'
+
+const imageUrl = new URL('https://example.com/photo.png')
+
+await sock.sendMessage(jid, {
+  image: { url: imageUrl },
+  caption: 'Photo from URL object'
+})
+```
+
+**Use Cases:**
+- Remote media files
+- CDN-hosted content
+- Public image URLs
+- Webhook media downloads
+
+**Important Notes:**
+- URL must be publicly accessible
+- Baileys downloads the file first, then uploads to WhatsApp
+- Consider timeout settings for large files
+- HTTP/HTTPS protocols supported
+
+---
+
+## Media Types Support
+
+All media message types support `WAMediaUpload`:
+
+### Image
+```javascript
+await sock.sendMessage(jid, {
+  image: buffer | { stream } | { url },
+  caption: 'Image caption'
+})
+```
+
+### Video
+```javascript
+await sock.sendMessage(jid, {
+  video: buffer | { stream } | { url },
+  caption: 'Video caption',
+  gifPlayback: false
+})
+```
+
+### Audio
+```javascript
+await sock.sendMessage(jid, {
+  audio: buffer | { stream } | { url },
+  ptt: true // voice note
+})
+```
+
+### Document
+```javascript
+await sock.sendMessage(jid, {
+  document: buffer | { stream } | { url },
+  mimetype: 'application/pdf',
+  fileName: 'document.pdf'
+})
+```
+
+### Sticker
+```javascript
+await sock.sendMessage(jid, {
+  sticker: buffer | { stream } | { url },
+  isAnimated: false
+})
+```
+
+---
+
+## Complete Examples
+
+### Example 1: Image with All Three Methods
+
+```javascript
+import fs from 'fs'
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({ /* auth */ })
+const jid = '1234567890@s.whatsapp.net'
+
+// Method 1: Buffer
+const imageBuffer = fs.readFileSync('./photo.jpg')
+await sock.sendMessage(jid, {
+  image: imageBuffer,
+  caption: 'Sent as Buffer'
+})
+
+// Method 2: Stream
+const imageStream = fs.createReadStream('./photo.jpg')
+await sock.sendMessage(jid, {
+  image: { stream: imageStream },
+  caption: 'Sent as Stream'
+})
+
+// Method 3: URL
+await sock.sendMessage(jid, {
+  image: { url: 'https://example.com/photo.jpg' },
+  caption: 'Sent from URL'
+})
+```
+
+### Example 2: Large Video with Stream
+
+```javascript
+import fs from 'fs'
+
+const sock = makeWASocket({ /* auth */ })
+
+// Stream large video file (memory efficient)
+const videoStream = fs.createReadStream('./movie.mp4')
+
+await sock.sendMessage(jid, 
+  {
+    video: { stream: videoStream },
+    caption: 'Full movie upload',
+    mimetype: 'video/mp4'
+  },
+  {
+    // Increase timeout for large file
+    mediaUploadTimeoutMs: 300000 // 5 minutes
+  }
+)
+```
+
+### Example 3: Document from URL with Custom Options
+
+```javascript
+const sock = makeWASocket({ /* auth */ })
+
+await sock.sendMessage(jid, 
+  {
+    document: { url: 'https://cdn.example.com/report.pdf' },
+    mimetype: 'application/pdf',
+    fileName: 'Monthly_Report_2024.pdf',
+    caption: 'Here is the monthly report'
+  },
+  {
+    quoted: previousMessage,
+    mediaUploadTimeoutMs: 60000
+  }
+)
+```
+
+### Example 4: Voice Note from Buffer
+
+```javascript
+import fs from 'fs'
+
+const sock = makeWASocket({ /* auth */ })
+
+// Read audio file
+const audioBuffer = fs.readFileSync('./voice-note.ogg')
+
+// Send as voice note (PTT)
+await sock.sendMessage(jid, {
+  audio: audioBuffer,
+  ptt: true, // Push-to-talk (voice note)
+  mimetype: 'audio/ogg; codecs=opus'
+})
+```
+
+### Example 5: Product Image Upload
+
+```javascript
+import fs from 'fs'
+
+const sock = makeWASocket({ /* auth */ })
+
+const productImageBuffer = fs.readFileSync('./product.jpg')
+
+await sock.sendMessage(jid, {
+  product: {
+    productImage: productImageBuffer, // WAMediaUpload type
+    productId: '12345',
+    title: 'Amazing Product',
+    description: 'Best product ever',
+    currencyCode: 'USD',
+    priceAmount1000: 99000, // $99.00
+    retailerId: 'shop123'
+  },
+  businessOwnerJid: 'business@s.whatsapp.net'
+})
+```
+
+---
+
+## Best Practices
+
+### When to Use Buffer
+- Files < 10MB
+- In-memory generated content
+- Already loaded data
+- Quick operations
+
+### When to Use Stream
+- Files > 10MB
+- Large videos (>50MB)
+- Memory-constrained environments
+- Processing pipelines
+
+### When to Use URL
+- Remote hosted files
+- CDN content
+- Webhook media
+- Public images
+
+---
+
+## Upload Configuration
+
+### Timeout Settings
+
+Control upload timeout using `mediaUploadTimeoutMs` option:
+
+```javascript
+// Default timeout
+const UPLOAD_TIMEOUT = 30000 // 30 seconds
+
+// Custom timeout for large files
+await sock.sendMessage(jid, 
+  { video: largeVideoStream },
+  { mediaUploadTimeoutMs: 120000 } // 2 minutes
+)
+```
+
+### Upload Intervals
+
+```javascript
+// Minimum interval between uploads
+const MIN_UPLOAD_INTERVAL = 5000 // 5 seconds
+```
+
+To avoid rate limiting, space out media uploads:
+
+```javascript
+const mediaFiles = [file1, file2, file3]
+
+for (const file of mediaFiles) {
+  await sock.sendMessage(jid, { image: file })
+  // Wait 5 seconds before next upload
+  await new Promise(resolve => setTimeout(resolve, 5000))
+}
+```
+
+---
+
+## Media Cache
+
+Baileys supports caching media to avoid re-uploading the same file:
+
+```javascript
+import makeWASocket, { makeInMemoryStore } from '@whiskeysockets/baileys'
+
+const store = makeInMemoryStore({})
+
+const sock = makeWASocket({
+  // ... auth config
+})
+
+// Store will cache media uploads
+store.bind(sock.ev)
+
+// First upload - uploads to WhatsApp servers
+await sock.sendMessage(jid1, { image: buffer })
+
+// Second upload of same media - may use cached URL
+await sock.sendMessage(jid2, { image: buffer })
+```
+
+---
+
+## Type Reference
+
+### Complete Type Definitions
+
+```typescript
+import type { Readable } from 'stream'
+import type { URL } from 'url'
+
+type WAMediaPayloadURL = { 
+  url: URL | string 
+}
+
+type WAMediaPayloadStream = { 
+  stream: Readable 
+}
+
+type WAMediaUpload = 
+  | Buffer 
+  | WAMediaPayloadStream 
+  | WAMediaPayloadURL
+```
+
+### MediaType Enum
+
+```typescript
+type MediaType = 
+  | 'image'
+  | 'video'
+  | 'document'
+  | 'audio'
+  | 'sticker'
+  | 'thumbnail-link'
+  | 'product-catalog-image'
+  | 'md-app-state'
+  | 'md-msg-hist'
+  | 'biz-cover-photo'
+```
+
+### Upload Function Type
+
+```typescript
+type WAMediaUploadFunction = (
+  encFilePath: string,
+  opts: {
+    fileEncSha256B64: string
+    mediaType: MediaType
+    timeoutMs?: number
+  }
+) => Promise<{
+  mediaUrl: string
+  directPath: string
+  meta_hmac?: string
+  ts?: number
+  fbid?: number
+}>
+```

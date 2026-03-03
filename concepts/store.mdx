@@ -1,0 +1,507 @@
+---
+title: Store
+description: Learn how to implement data persistence for chats, contacts, and messages
+icon: 'database'
+---
+
+Baileys does not include built-in persistent storage for messages, chats, or contacts. You need to implement your own data store to maintain chat history and contact information.
+
+## Why You Need a Store
+
+Without a data store:
+- Message history is lost when your application restarts
+- You can't query past messages
+- Chat metadata is not persisted
+- Contact information must be refetched
+
+<Warning>
+  Baileys previously included `makeInMemoryStore`, but it's not recommended for production use as it stores everything in RAM. For production applications, implement a database-backed store.
+</Warning>
+
+## Store Requirements
+
+A complete store should handle:
+
+1. **Messages** - Store and retrieve message history
+2. **Chats** - Persist chat metadata and unread counts
+3. **Contacts** - Save contact names and profile info
+4. **Groups** - Cache group metadata and participants
+
+## Basic In-Memory Implementation
+
+Here's a simple in-memory store example:
+
+```typescript
+import { WAMessage, Chat, Contact } from '@whiskeysockets/baileys'
+
+class SimpleStore {
+    public messages: Map<string, WAMessage[]> = new Map()
+    public chats: Map<string, Chat> = new Map()
+    public contacts: Map<string, Contact> = new Map()
+    
+    constructor(private sock: ReturnType<typeof makeWASocket>) {
+        this.bind()
+    }
+    
+    private bind() {
+        // Store new messages
+        this.sock.ev.on('messages.upsert', ({ messages }) => {
+            for (const msg of messages) {
+                const jid = msg.key.remoteJid!
+                const existing = this.messages.get(jid) || []
+                existing.push(msg)
+                this.messages.set(jid, existing)
+            }
+        })
+        
+        // Store chats
+        this.sock.ev.on('chats.upsert', (chats) => {
+            for (const chat of chats) {
+                this.chats.set(chat.id, chat)
+            }
+        })
+        
+        // Update chats
+        this.sock.ev.on('chats.update', (updates) => {
+            for (const update of updates) {
+                const chat = this.chats.get(update.id!)
+                if (chat) {
+                    Object.assign(chat, update)
+                }
+            }
+        })
+        
+        // Store contacts
+        this.sock.ev.on('contacts.upsert', (contacts) => {
+            for (const contact of contacts) {
+                this.contacts.set(contact.id, contact)
+            }
+        })
+    }
+    
+    getMessages(jid: string): WAMessage[] {
+        return this.messages.get(jid) || []
+    }
+    
+    getMessage(key: WAMessageKey): WAMessage | undefined {
+        const messages = this.messages.get(key.remoteJid!)
+        return messages?.find(m => m.key.id === key.id)
+    }
+    
+    getChat(jid: string): Chat | undefined {
+        return this.chats.get(jid)
+    }
+}
+
+// Usage
+const sock = makeWASocket({ /* config */ })
+const store = new SimpleStore(sock)
+```
+
+## Database-Backed Store
+
+For production, use a database like PostgreSQL, MongoDB, or SQLite:
+
+```typescript
+import { WAMessage, Chat, Contact } from '@whiskeysockets/baileys'
+import { Database } from 'your-db-library'
+
+class DatabaseStore {
+    constructor(
+        private db: Database,
+        private sock: ReturnType<typeof makeWASocket>
+    ) {
+        this.bind()
+    }
+    
+    private bind() {
+        // Store messages in database
+        this.sock.ev.on('messages.upsert', async ({ messages }) => {
+            for (const msg of messages) {
+                await this.db.messages.insert({
+                    id: msg.key.id,
+                    remoteJid: msg.key.remoteJid,
+                    fromMe: msg.key.fromMe,
+                    participant: msg.key.participant,
+                    timestamp: msg.messageTimestamp,
+                    message: JSON.stringify(msg.message),
+                    pushName: msg.pushName,
+                    broadcast: msg.broadcast
+                })
+            }
+        })
+        
+        // Store chats
+        this.sock.ev.on('chats.upsert', async (chats) => {
+            for (const chat of chats) {
+                await this.db.chats.upsert({
+                    id: chat.id,
+                    name: chat.name,
+                    unreadCount: chat.unreadCount,
+                    conversationTimestamp: chat.conversationTimestamp,
+                    data: JSON.stringify(chat)
+                })
+            }
+        })
+        
+        // Update chats
+        this.sock.ev.on('chats.update', async (updates) => {
+            for (const update of updates) {
+                await this.db.chats.update(
+                    { id: update.id },
+                    update
+                )
+            }
+        })
+        
+        // Delete messages
+        this.sock.ev.on('messages.delete', async (deletion) => {
+            if ('keys' in deletion) {
+                for (const key of deletion.keys) {
+                    await this.db.messages.delete({
+                        id: key.id,
+                        remoteJid: key.remoteJid
+                    })
+                }
+            } else {
+                await this.db.messages.deleteMany({
+                    remoteJid: deletion.jid
+                })
+            }
+        })
+    }
+    
+    async getMessage(key: WAMessageKey): Promise<WAMessage | undefined> {
+        const row = await this.db.messages.findOne({
+            id: key.id,
+            remoteJid: key.remoteJid
+        })
+        
+        if (!row) return undefined
+        
+        return {
+            key: {
+                id: row.id,
+                remoteJid: row.remoteJid,
+                fromMe: row.fromMe,
+                participant: row.participant
+            },
+            message: JSON.parse(row.message),
+            messageTimestamp: row.timestamp,
+            pushName: row.pushName
+        }
+    }
+    
+    async getMessages(jid: string, limit = 50): Promise<WAMessage[]> {
+        const rows = await this.db.messages.find(
+            { remoteJid: jid },
+            { limit, orderBy: { timestamp: 'DESC' } }
+        )
+        
+        return rows.map(row => ({
+            key: {
+                id: row.id,
+                remoteJid: row.remoteJid,
+                fromMe: row.fromMe
+            },
+            message: JSON.parse(row.message),
+            messageTimestamp: row.timestamp
+        }))
+    }
+}
+```
+
+## Implementing getMessage
+
+Many Baileys features require a `getMessage` function to retrieve messages from your store:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const store = new DatabaseStore(db, sock)
+
+const sock = makeWASocket({
+    // Provide getMessage for:
+    // - Message retries
+    // - Poll vote decryption
+    // - Quote message handling
+    getMessage: async (key) => {
+        return await store.getMessage(key)
+    }
+})
+```
+
+### Why getMessage is Important
+
+<Steps>
+  <Step title="Message retries">
+    When message delivery fails, WhatsApp may request a retry. Baileys needs the original message to resend it.
+  </Step>
+  
+  <Step title="Poll votes">
+    Poll votes are encrypted and reference the original poll message. You need `getMessage` to decrypt votes.
+    
+    ```typescript
+    sock.ev.on('messages.update', async (updates) => {
+        for (const { key, update } of updates) {
+            if (update.pollUpdates) {
+                const pollMessage = await getMessage(key)
+                if (pollMessage) {
+                    const votes = getAggregateVotesInPollMessage({
+                        message: pollMessage,
+                        pollUpdates: update.pollUpdates
+                    })
+                    console.log('Poll results:', votes)
+                }
+            }
+        }
+    })
+    ```
+  </Step>
+  
+  <Step title="Forward messages">
+    When forwarding messages, Baileys needs access to the original message content.
+  </Step>
+</Steps>
+
+## Storing Message Media
+
+Messages with media (images, videos, documents) should store media references:
+
+```typescript
+sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+        if (msg.message?.imageMessage) {
+            const imageMsg = msg.message.imageMessage
+            
+            // Store media reference
+            await db.media.insert({
+                messageId: msg.key.id,
+                mediaKey: imageMsg.mediaKey,
+                directPath: imageMsg.directPath,
+                url: imageMsg.url,
+                mimetype: imageMsg.mimetype,
+                fileLength: imageMsg.fileLength,
+                caption: imageMsg.caption
+            })
+        }
+    }
+})
+```
+
+## Caching Group Metadata
+
+Group operations are faster when you cache group metadata:
+
+```typescript
+import NodeCache from '@cacheable/node-cache'
+
+const groupCache = new NodeCache({ 
+    stdTTL: 5 * 60, // 5 minutes
+    useClones: false 
+})
+
+const sock = makeWASocket({
+    cachedGroupMetadata: async (jid) => groupCache.get(jid)
+})
+
+// Update cache when groups change
+sock.ev.on('groups.update', async ([event]) => {
+    const metadata = await sock.groupMetadata(event.id)
+    groupCache.set(event.id, metadata)
+})
+
+sock.ev.on('group-participants.update', async (event) => {
+    const metadata = await sock.groupMetadata(event.id)
+    groupCache.set(event.id, metadata)
+})
+```
+
+## Store Events to Listen
+
+Implement handlers for all these events:
+
+```typescript
+class CompletePersistentStore {
+    private bind() {
+        // Messages
+        this.sock.ev.on('messages.upsert', this.handleMessagesUpsert)
+        this.sock.ev.on('messages.update', this.handleMessagesUpdate)
+        this.sock.ev.on('messages.delete', this.handleMessagesDelete)
+        
+        // Chats
+        this.sock.ev.on('chats.upsert', this.handleChatsUpsert)
+        this.sock.ev.on('chats.update', this.handleChatsUpdate)
+        this.sock.ev.on('chats.delete', this.handleChatsDelete)
+        
+        // Contacts
+        this.sock.ev.on('contacts.upsert', this.handleContactsUpsert)
+        this.sock.ev.on('contacts.update', this.handleContactsUpdate)
+        
+        // Groups
+        this.sock.ev.on('groups.upsert', this.handleGroupsUpsert)
+        this.sock.ev.on('groups.update', this.handleGroupsUpdate)
+        
+        // History
+        this.sock.ev.on('messaging-history.set', this.handleHistorySet)
+    }
+}
+```
+
+## Example: PostgreSQL Schema
+
+```sql
+CREATE TABLE messages (
+    id VARCHAR(255) NOT NULL,
+    remote_jid VARCHAR(255) NOT NULL,
+    from_me BOOLEAN DEFAULT FALSE,
+    participant VARCHAR(255),
+    timestamp BIGINT,
+    message JSONB,
+    push_name VARCHAR(255),
+    PRIMARY KEY (id, remote_jid)
+);
+
+CREATE INDEX idx_messages_jid ON messages(remote_jid, timestamp DESC);
+
+CREATE TABLE chats (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255),
+    unread_count INTEGER DEFAULT 0,
+    conversation_timestamp BIGINT,
+    archived BOOLEAN DEFAULT FALSE,
+    pinned BOOLEAN DEFAULT FALSE,
+    data JSONB
+);
+
+CREATE TABLE contacts (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255),
+    notify VARCHAR(255),
+    verified_name VARCHAR(255),
+    img_url TEXT,
+    status TEXT
+);
+```
+
+## Example: MongoDB Schema
+
+```typescript
+import { Schema, model } from 'mongoose'
+
+const MessageSchema = new Schema({
+    _id: String, // key.id
+    remoteJid: { type: String, index: true },
+    fromMe: Boolean,
+    participant: String,
+    timestamp: { type: Number, index: true },
+    message: Schema.Types.Mixed,
+    pushName: String
+})
+
+const ChatSchema = new Schema({
+    _id: String, // chat.id
+    name: String,
+    unreadCount: { type: Number, default: 0 },
+    conversationTimestamp: Number,
+    archived: Boolean,
+    pinned: Boolean,
+    data: Schema.Types.Mixed
+})
+
+const ContactSchema = new Schema({
+    _id: String, // contact.id
+    name: String,
+    notify: String,
+    verifiedName: String,
+    imgUrl: String,
+    status: String
+})
+
+export const Message = model('Message', MessageSchema)
+export const Chat = model('Chat', ChatSchema)
+export const Contact = model('Contact', ContactSchema)
+```
+
+## Message Deduplication
+
+Implement deduplication to avoid storing duplicate messages:
+
+```typescript
+sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+        // Check if message already exists
+        const exists = await db.messages.findOne({
+            id: msg.key.id,
+            remoteJid: msg.key.remoteJid
+        })
+        
+        if (!exists) {
+            await db.messages.insert({
+                id: msg.key.id,
+                remoteJid: msg.key.remoteJid,
+                message: msg.message,
+                timestamp: msg.messageTimestamp
+            })
+        }
+    }
+})
+```
+
+## Store Best Practices
+
+<Warning>
+  Follow these best practices when implementing your store:
+</Warning>
+
+1. **Use indexes** - Index `remoteJid` and `timestamp` for fast queries
+2. **Handle duplicates** - Messages may arrive multiple times during sync
+3. **Implement cleanup** - Delete old messages to manage storage
+4. **Batch operations** - Use batch inserts for history sync
+5. **Error handling** - Don't let store errors crash your application
+6. **Backup regularly** - Message data is critical for your application
+
+## Complete Store Example
+
+```typescript
+import makeWASocket, { WAMessage, WAMessageKey } from '@whiskeysockets/baileys'
+
+class MessageStore {
+    private messages = new Map<string, WAMessage[]>()
+    
+    constructor(sock: ReturnType<typeof makeWASocket>) {
+        sock.ev.on('messages.upsert', ({ messages }) => {
+            this.addMessages(messages)
+        })
+        
+        sock.ev.on('messages.update', (updates) => {
+            this.updateMessages(updates)
+        })
+        
+        sock.ev.on('messages.delete', (deletion) => {
+            this.deleteMessages(deletion)
+        })
+    }
+    
+    private addMessages(messages: WAMessage[]) {
+        for (const msg of messages) {
+            const jid = msg.key.remoteJid!
+            if (!this.messages.has(jid)) {
+                this.messages.set(jid, [])
+            }
+            this.messages.get(jid)!.push(msg)
+        }
+    }
+    
+    getMessage = async (key: WAMessageKey): Promise<WAMessage | undefined> => {
+        const messages = this.messages.get(key.remoteJid!)
+        return messages?.find(m => m.key.id === key.id)
+    }
+}
+
+const sock = makeWASocket({
+    getMessage: async (key) => await messageStore.getMessage(key)
+})
+
+const messageStore = new MessageStore(sock)
+```

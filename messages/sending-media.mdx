@@ -1,0 +1,296 @@
+---
+title: "Sending Media Messages"
+description: "Send images, videos, audio, documents, and stickers"
+---
+
+## Media Upload Types
+
+Bailey supports three ways to provide media:
+
+<CodeGroup>
+```typescript Buffer
+await sock.sendMessage(jid, {
+    image: fs.readFileSync('./image.png'),
+    caption: 'Image from buffer'
+})
+```
+
+```typescript URL
+await sock.sendMessage(jid, {
+    image: { url: './image.png' },
+    caption: 'Image from URL'
+})
+```
+
+```typescript Stream
+await sock.sendMessage(jid, {
+    image: { stream: readStream },
+    caption: 'Image from stream'
+})
+```
+</CodeGroup>
+
+<Note>
+Using streams or URLs is recommended to save memory. Baileys encrypts media as a readable stream without loading the entire buffer into memory.
+</Note>
+
+## Image Messages
+
+Send image messages with optional caption and dimensions:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        image: { url: './Media/ma_img.png' },
+        caption: 'hello world',
+        jpegThumbnail: thumbnailBuffer, // optional
+        width: 1920, // optional
+        height: 1080 // optional
+    }
+)
+```
+
+### Type Signature
+
+```typescript
+{
+    image: WAMediaUpload
+    caption?: string
+    jpegThumbnail?: string
+    width?: number
+    height?: number
+} & Mentionable & Contextable
+```
+
+## Video Messages
+
+Send video messages with playback options:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        video: { url: './Media/video.mp4' },
+        caption: 'Check this out',
+        gifPlayback: false,
+        ptv: false // if true, sends as a video note
+    }
+)
+```
+
+### Video Notes (PTV)
+
+Send circular video notes (like Instagram stories):
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        video: { url: './Media/video.mp4' },
+        ptv: true // sends as video note
+    }
+)
+```
+
+## GIF Messages
+
+WhatsApp doesn't support `.gif` files directly. Send GIFs as `.mp4` videos with `gifPlayback` enabled:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        video: fs.readFileSync('Media/ma_gif.mp4'),
+        caption: 'hello world',
+        gifPlayback: true
+    }
+)
+```
+
+## Audio Messages
+
+Send audio files or voice notes:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        audio: { url: './Media/audio.mp3' },
+        mimetype: 'audio/mp4',
+        ptt: false // if true, sends as voice note
+    }
+)
+```
+
+### Voice Notes
+
+Send PTT (Push-to-Talk) voice messages:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        audio: { url: './Media/voice.ogg' },
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true,
+        seconds: 30 // optional duration
+    }
+)
+```
+
+<Warning>
+For audio to work on all devices, convert to `.ogg` with libopus codec:
+
+```bash
+ffmpeg -i input.mp4 -avoid_negative_ts make_zero -ac 1 output.ogg
+```
+
+Required flags:
+- `codec: libopus` (ogg file)
+- `ac: 1` (mono channel)
+- `avoid_negative_ts make_zero`
+</Warning>
+
+## Document Messages
+
+Send documents with mimetype and filename:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        document: { url: './Media/document.pdf' },
+        mimetype: 'application/pdf',
+        fileName: 'Report.pdf',
+        caption: 'Monthly report'
+    }
+)
+```
+
+### Common MIME Types
+
+- PDF: `application/pdf`
+- Word: `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+- Excel: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- Text: `text/plain`
+
+## Sticker Messages
+
+Send stickers (static or animated):
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        sticker: { url: './Media/sticker.webp' },
+        isAnimated: false,
+        width: 512,
+        height: 512
+    }
+)
+```
+
+<Note>
+Stickers should be WebP format, 512x512 pixels. For animated stickers, use animated WebP.
+</Note>
+
+## View Once Messages
+
+Send media that can only be viewed once:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        image: { url: './Media/secret.png' },
+        viewOnce: true,
+        caption: 'This will disappear after viewing'
+    }
+)
+```
+
+Works with:
+- Images
+- Videos
+- Audio
+
+## Thumbnails
+
+Baileys can auto-generate thumbnails if you install optional dependencies:
+
+<Tabs>
+  <Tab title="Using jimp">
+    ```bash
+    yarn add jimp
+    ```
+    Auto-generates thumbnails for images and stickers.
+  </Tab>
+  <Tab title="Using sharp">
+    ```bash
+    yarn add sharp
+    ```
+    Faster alternative for image thumbnails.
+  </Tab>
+  <Tab title="Using ffmpeg">
+    Install ffmpeg on your system for video thumbnails:
+    ```bash
+    # Ubuntu/Debian
+    sudo apt install ffmpeg
+    
+    # macOS
+    brew install ffmpeg
+    ```
+  </Tab>
+</Tabs>
+
+## Type Reference
+
+From `src/Types/Message.ts:163-198`:
+
+```typescript
+export type AnyMediaMessageContent = (
+    | ({
+        image: WAMediaUpload
+        caption?: string
+        jpegThumbnail?: string
+      } & Mentionable & Contextable & WithDimensions)
+    | ({
+        video: WAMediaUpload
+        caption?: string
+        gifPlayback?: boolean
+        jpegThumbnail?: string
+        ptv?: boolean
+      } & Mentionable & Contextable & WithDimensions)
+    | {
+        audio: WAMediaUpload
+        ptt?: boolean
+        seconds?: number
+      }
+    | ({
+        sticker: WAMediaUpload
+        isAnimated?: boolean
+      } & WithDimensions)
+    | ({
+        document: WAMediaUpload
+        mimetype: string
+        fileName?: string
+        caption?: string
+      } & Contextable)
+) & { mimetype?: string } & Editable
+```
+
+## Media with Mentions
+
+You can mention users in media captions:
+
+```typescript
+await sock.sendMessage(
+    jid,
+    {
+        image: { url: './photo.jpg' },
+        caption: 'Hey @12345678901, check this out!',
+        mentions: ['12345678901@s.whatsapp.net']
+    }
+)
+```

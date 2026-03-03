@@ -1,0 +1,408 @@
+---
+title: 'Debugging'
+description: 'Debug logging, troubleshooting, and error handling in Baileys'
+---
+
+Baileys uses the `pino` logger for debug output. This page covers how to configure logging levels, troubleshoot common issues, and debug your integration.
+
+## Logger Configuration
+
+Baileys uses [Pino](https://getpino.io/) as its logging library. You can configure the logger when creating a socket connection.
+
+### Log Levels
+
+Pino supports these log levels (from least to most verbose):
+
+- `silent` - No output
+- `fatal` - Fatal errors only
+- `error` - Errors only
+- `warn` - Warnings and errors
+- `info` - Informational messages (default)
+- `debug` - Debug information
+- `trace` - Extremely detailed trace information
+
+### Basic Logger Setup
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+import P from 'pino'
+
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+```
+
+### Silent Mode (Testing)
+
+For unit tests or when you want no output:
+
+```typescript
+const sock = makeWASocket({
+    logger: P({ level: 'silent' })
+})
+```
+
+### Pretty-Printed Logs
+
+Use `pino-pretty` for human-readable console output:
+
+```typescript
+import P from 'pino'
+
+const logger = P({
+    level: 'trace',
+    transport: {
+        target: 'pino-pretty',
+        options: { colorize: true }
+    }
+})
+
+const sock = makeWASocket({ logger })
+```
+
+<Note>
+You need to install `pino-pretty` separately: `npm install pino-pretty`
+</Note>
+
+## Debug Level Output
+
+### Enabling Debug Logs
+
+Debug level shows unhandled messages from WhatsApp:
+
+```typescript
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+```
+
+With debug enabled, you'll see output like:
+
+```json
+{
+    "unhandled": true,
+    "msgId": "1234.5678-9",
+    "fromMe": false,
+    "frame": {
+        "tag": "ib",
+        "attrs": { "from": "@s.whatsapp.net" },
+        "content": [...]
+    },
+    "msg": "communication recv"
+}
+```
+
+This helps you identify messages that Baileys isn't handling, which you can then process with [custom handlers](/advanced/custom-functionality).
+
+## Trace Level Output
+
+### Enabling Trace Logs
+
+Trace level shows the XML representation of ALL binary nodes sent and received:
+
+```typescript
+const sock = makeWASocket({
+    logger: P({ level: 'trace' })
+})
+```
+
+### What Trace Shows
+
+You'll see two types of trace messages:
+
+**Received messages:**
+```
+{xml: '<iq id="123" type="result">...</iq>', msg: 'recv xml'}
+```
+
+**Sent messages:**
+```
+{xml: '<iq id="456" type="get">...</iq>', msg: 'xml send'}
+```
+
+<Warning>
+Trace level produces MASSIVE amounts of output. Use it only for debugging specific protocol issues.
+</Warning>
+
+### Trace in Source Code
+
+From `src/Socket/socket.ts`:
+
+```typescript
+// When sending a node
+const sendNode = (frame: BinaryNode) => {
+    if (logger.level === 'trace') {
+        logger.trace({ xml: binaryNodeToString(frame), msg: 'xml send' })
+    }
+    // ...
+}
+
+// When receiving a frame
+if (logger.level === 'trace') {
+    logger.trace({ xml: binaryNodeToString(frame), msg: 'recv xml' })
+}
+```
+
+## Multi-Transport Logging
+
+Log to both console and file:
+
+```typescript
+import P from 'pino'
+
+const logger = P({
+    level: 'trace',
+    transport: {
+        targets: [
+            {
+                target: 'pino-pretty',
+                options: { colorize: true },
+                level: 'trace'
+            },
+            {
+                target: 'pino/file',
+                options: { destination: './wa-logs.txt' },
+                level: 'trace'
+            }
+        ]
+    }
+})
+
+const sock = makeWASocket({ logger })
+```
+
+This logs pretty output to console and raw JSON to `wa-logs.txt`.
+
+## Common Debugging Scenarios
+
+### Debug Connection Issues
+
+```typescript
+import P from 'pino'
+
+const logger = P({ level: 'debug' })
+const sock = makeWASocket({ logger })
+
+sock.ev.on('connection.update', (update) => {
+    console.log('Connection update:', update)
+    
+    if (update.connection === 'close') {
+        const { error } = update.lastDisconnect || {}
+        console.error('Connection closed:', error)
+    }
+})
+```
+
+### Debug Message Sending
+
+Enable trace to see the exact XML being sent:
+
+```typescript
+const sock = makeWASocket({
+    logger: P({ level: 'trace' })
+})
+
+await sock.sendMessage(jid, { text: 'Hello' })
+// You'll see the XML representation of the message in logs
+```
+
+### Debug Authentication
+
+Log credential updates:
+
+```typescript
+sock.ev.on('creds.update', (update) => {
+    console.log('Credentials updated:', Object.keys(update))
+})
+```
+
+### Debug Message Reception
+
+```typescript
+sock.ev.on('messages.upsert', ({ messages, type }) => {
+    console.log('Messages received:', type, messages.length)
+    for (const msg of messages) {
+        console.log('Message:', JSON.stringify(msg, null, 2))
+    }
+})
+```
+
+## Troubleshooting Common Issues
+
+### Issue: No Messages Received
+
+**Check:**
+1. Connection status is `'open'`
+2. You're listening to the correct event: `messages.upsert`
+3. Offline messages are processed: `receivedPendingNotifications: true`
+
+```typescript
+sock.ev.on('connection.update', ({ connection, receivedPendingNotifications }) => {
+    console.log('Connection:', connection)
+    console.log('Offline msgs processed:', receivedPendingNotifications)
+})
+```
+
+### Issue: Cannot Send Messages
+
+**Enable debug logs:**
+
+```typescript
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+
+try {
+    await sock.sendMessage(jid, { text: 'test' })
+} catch (error) {
+    console.error('Send failed:', error)
+}
+```
+
+**Common causes:**
+- Socket not open yet
+- Invalid JID format
+- Pre-keys not uploaded
+- Session expired
+
+### Issue: Pre-Key Upload Errors
+
+```typescript
+// Check pre-key count on server
+const sock = makeWASocket({
+    logger: P({ level: 'debug' })
+})
+
+// Look for logs like:
+// "uploading pre-keys" - Pre-keys being uploaded
+// "uploaded pre-keys successfully" - Success
+// "Failed to upload pre-keys to server" - Error
+```
+
+### Issue: Connection Keeps Closing
+
+Check the disconnect reason:
+
+```typescript
+import { DisconnectReason } from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
+
+sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+        
+        switch(statusCode) {
+            case DisconnectReason.badSession:
+                console.log('Bad Session File, Delete and Scan Again')
+                break
+            case DisconnectReason.connectionClosed:
+                console.log('Connection closed, reconnecting...')
+                break
+            case DisconnectReason.connectionLost:
+                console.log('Connection Lost from Server, reconnecting...')
+                break
+            case DisconnectReason.connectionReplaced:
+                console.log('Connection Replaced, Another New Session Opened')
+                break
+            case DisconnectReason.loggedOut:
+                console.log('Device Logged Out, Delete and Scan Again')
+                break
+            case DisconnectReason.restartRequired:
+                console.log('Restart Required, Restarting...')
+                break
+            case DisconnectReason.timedOut:
+                console.log('Connection TimedOut, Reconnecting...')
+                break
+            default:
+                console.log('Unknown disconnect reason:', statusCode)
+        }
+    }
+})
+```
+
+## Debugging Custom Functionality
+
+When writing custom handlers, log extensively:
+
+```typescript
+import { BinaryNode } from '@whiskeysockets/baileys'
+
+sock.ws.on('CB:ib,,custom-event', (node: BinaryNode) => {
+    console.log('Custom event received')
+    console.log('Tag:', node.tag)
+    console.log('Attrs:', node.attrs)
+    console.log('Content:', node.content)
+    
+    try {
+        // Your custom logic
+    } catch (error) {
+        console.error('Error in custom handler:', error)
+    }
+})
+```
+
+## Performance Debugging
+
+### Monitor Event Processing
+
+```typescript
+sock.ev.on('messages.upsert', async ({ messages }) => {
+    const start = Date.now()
+    
+    for (const msg of messages) {
+        await processMessage(msg)
+    }
+    
+    console.log(`Processed ${messages.length} messages in ${Date.now() - start}ms`)
+})
+```
+
+### Monitor Memory Usage
+
+```typescript
+setInterval(() => {
+    const used = process.memoryUsage()
+    console.log('Memory usage:', {
+        rss: `${Math.round(used.rss / 1024 / 1024)}MB`,
+        heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)}MB`
+    })
+}, 60000) // Every minute
+```
+
+## Best Practices
+
+<Tip>
+**Development:** Use `level: 'debug'` to see all unhandled messages
+
+**Production:** Use `level: 'warn'` or `level: 'error'` to reduce noise
+
+**Debugging specific issues:** Use `level: 'trace'` temporarily
+</Tip>
+
+### Structured Logging
+
+```typescript
+const logger = P({ level: 'debug' })
+
+// Good: Structured data
+logger.info({ user: jid, msgId }, 'message sent')
+
+// Avoid: String concatenation
+logger.info('message sent to ' + jid + ' with id ' + msgId)
+```
+
+### Error Context
+
+```typescript
+try {
+    await sock.sendMessage(jid, { text: 'hello' })
+} catch (error) {
+    logger.error({ error, jid }, 'failed to send message')
+}
+```
+
+## Next Steps
+
+- Learn about [custom functionality](/advanced/custom-functionality)
+- Understand [WebSocket event patterns](/advanced/websocket-events)
+- Explore the example at `Example/example.ts:7-24` for a complete logging setup

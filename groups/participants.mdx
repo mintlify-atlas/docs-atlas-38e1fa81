@@ -1,0 +1,168 @@
+---
+title: Managing Participants
+description: Add, remove, promote, and demote group participants
+---
+
+## Managing Group Participants
+
+The `groupParticipantsUpdate` method allows you to add, remove, promote, or demote participants in a group.
+
+### Adding Participants
+
+```typescript
+await sock.groupParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net', 'efgh@s.whatsapp.net'],
+  'add'
+)
+```
+
+### Removing Participants
+
+```typescript
+await sock.groupParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net', 'efgh@s.whatsapp.net'],
+  'remove'
+)
+```
+
+### Promoting to Admin
+
+```typescript
+await sock.groupParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net'],
+  'promote'
+)
+```
+
+### Demoting from Admin
+
+```typescript
+await sock.groupParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net'],
+  'demote'
+)
+```
+
+## Method Signature
+
+```typescript
+groupParticipantsUpdate(
+  jid: string,
+  participants: string[],
+  action: ParticipantAction
+): Promise<Array<{ status: string; jid: string; content: BinaryNode }>>
+```
+
+**Parameters:**
+- `jid` - The group JID
+- `participants` - Array of participant JIDs to update
+- `action` - One of: `'add'`, `'remove'`, `'promote'`, or `'demote'`
+
+**Returns:** An array of results for each participant, containing:
+- `status` - HTTP-style status code (`'200'` for success, error code otherwise)
+- `jid` - The participant's JID
+- `content` - Raw binary node response
+
+<Warning>
+You must be a group admin to add, remove, promote, or demote participants. The operation will fail if you don't have admin privileges.
+</Warning>
+
+## Handling Join Requests
+
+When a group requires approval to join, you can manage pending requests.
+
+### Getting Request List
+
+Retrieve the list of users who have requested to join the group.
+
+```typescript
+const requests = await sock.groupRequestParticipantsList(jid)
+console.log(requests)
+```
+
+### Method Signature
+
+```typescript
+groupRequestParticipantsList(jid: string): Promise<Array<any>>
+```
+
+**Parameters:**
+- `jid` - The group JID
+
+**Returns:** Array of membership request objects with participant details
+
+### Approving or Rejecting Requests
+
+Approve or reject join requests from users.
+
+```typescript
+// Approve requests
+const response = await sock.groupRequestParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net', 'efgh@s.whatsapp.net'],
+  'approve'
+)
+console.log(response)
+
+// Reject requests
+const response = await sock.groupRequestParticipantsUpdate(
+  jid,
+  ['abcd@s.whatsapp.net', 'efgh@s.whatsapp.net'],
+  'reject'
+)
+console.log(response)
+```
+
+### Method Signature
+
+```typescript
+groupRequestParticipantsUpdate(
+  jid: string,
+  participants: string[],
+  action: 'approve' | 'reject'
+): Promise<Array<{ status: string; jid: string }>>
+```
+
+**Parameters:**
+- `jid` - The group JID
+- `participants` - Array of participant JIDs to approve or reject
+- `action` - Either `'approve'` or `'reject'`
+
+**Returns:** Array of results containing status and JID for each participant
+
+<Note>
+The status will be `'200'` for successful operations or an error code if the operation failed.
+</Note>
+
+## Understanding Participant Status
+
+When you receive the response from participant operations, the status codes follow HTTP conventions:
+
+- `200` - Operation successful
+- `403` - Forbidden (e.g., user has blocked the group or you)
+- `404` - User not found
+- Other codes indicate various error conditions
+
+## Best Practices
+
+<Steps>
+  <Step title="Check return values">
+    Always check the `status` field in the response to verify if each participant was successfully added, removed, or updated.
+  </Step>
+  
+  <Step title="Handle partial failures">
+    When updating multiple participants, some operations may succeed while others fail. Process each result individually.
+  </Step>
+  
+  <Step title="Validate JIDs">
+    Use `onWhatsApp()` to verify that participant JIDs exist before attempting to add them to groups.
+  </Step>
+  
+  <Step title="Respect privacy settings">
+    Users with strict privacy settings may prevent being added to groups. Handle these cases gracefully.
+  </Step>
+</Steps>

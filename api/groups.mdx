@@ -1,0 +1,426 @@
+---
+title: 'Group Management'
+description: 'Methods for managing WhatsApp groups'
+---
+
+This page documents all group-related methods available in the Baileys WhatsApp API.
+
+## Group Information
+
+### groupMetadata
+
+Fetch the metadata for a group.
+
+<ParamField path="jid" type="string" required>
+  The JID of the group
+</ParamField>
+
+<ResponseField name="return" type="Promise<GroupMetadata>">
+  Returns the group metadata including:
+  - `id`: Group JID
+  - `subject`: Group name
+  - `creation`: Creation timestamp
+  - `owner`: Group creator JID
+  - `participants`: Array of group members
+  - `desc`: Group description
+  - `announce`: Whether only admins can send messages
+  - `restrict`: Whether only admins can edit group info
+  - And more properties
+</ResponseField>
+
+```typescript
+const metadata = await sock.groupMetadata('123456789@g.us')
+console.log('Group name:', metadata.subject)
+console.log('Participants:', metadata.participants.length)
+```
+
+### groupFetchAllParticipating
+
+Fetch all groups you are participating in.
+
+<ResponseField name="return" type="Promise<{ [jid: string]: GroupMetadata }>">
+  Returns an object mapping group JIDs to their metadata
+</ResponseField>
+
+```typescript
+const groups = await sock.groupFetchAllParticipating()
+for (const [jid, metadata] of Object.entries(groups)) {
+  console.log('Group:', metadata.subject)
+}
+```
+
+## Group Creation & Management
+
+### groupCreate
+
+Create a new WhatsApp group.
+
+<ParamField path="subject" type="string" required>
+  The name of the group
+</ParamField>
+
+<ParamField path="participants" type="string[]" required>
+  Array of participant JIDs to add to the group
+</ParamField>
+
+<ResponseField name="return" type="Promise<GroupMetadata>">
+  Returns the metadata of the newly created group
+</ResponseField>
+
+```typescript
+const group = await sock.groupCreate(
+  'My New Group',
+  ['1234567890@s.whatsapp.net', '0987654321@s.whatsapp.net']
+)
+console.log('Created group:', group.id)
+```
+
+### groupLeave
+
+Leave a group.
+
+<ParamField path="id" type="string" required>
+  The group JID to leave
+</ParamField>
+
+```typescript
+await sock.groupLeave('123456789@g.us')
+```
+
+### groupUpdateSubject
+
+Update the group name/subject.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="subject" type="string" required>
+  The new group name
+</ParamField>
+
+```typescript
+await sock.groupUpdateSubject('123456789@g.us', 'New Group Name')
+```
+
+### groupUpdateDescription
+
+Update the group description.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="description" type="string | undefined">
+  The new description, or undefined to remove it
+</ParamField>
+
+```typescript
+// Set description
+await sock.groupUpdateDescription('123456789@g.us', 'This is our group description')
+
+// Remove description
+await sock.groupUpdateDescription('123456789@g.us', undefined)
+```
+
+## Participant Management
+
+### groupParticipantsUpdate
+
+Add, remove, promote, or demote group participants.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="participants" type="string[]" required>
+  Array of participant JIDs to modify
+</ParamField>
+
+<ParamField path="action" type="ParticipantAction" required>
+  The action to perform: `'add'`, `'remove'`, `'promote'`, or `'demote'`
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array<{ status: string, jid: string }>>">
+  Returns an array of results for each participant with status code and JID
+</ResponseField>
+
+```typescript
+// Add participants
+const result = await sock.groupParticipantsUpdate(
+  '123456789@g.us',
+  ['1234567890@s.whatsapp.net'],
+  'add'
+)
+
+// Promote to admin
+await sock.groupParticipantsUpdate(
+  '123456789@g.us',
+  ['1234567890@s.whatsapp.net'],
+  'promote'
+)
+
+// Remove participants
+await sock.groupParticipantsUpdate(
+  '123456789@g.us',
+  ['1234567890@s.whatsapp.net'],
+  'remove'
+)
+```
+
+### groupRequestParticipantsList
+
+Get list of users requesting to join the group (when join approval is enabled).
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array<{ jid: string }>>">
+  Returns an array of participant objects with their JIDs
+</ResponseField>
+
+```typescript
+const requests = await sock.groupRequestParticipantsList('123456789@g.us')
+for (const request of requests) {
+  console.log('Pending request from:', request.jid)
+}
+```
+
+### groupRequestParticipantsUpdate
+
+Approve or reject participant join requests.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="participants" type="string[]" required>
+  Array of participant JIDs to approve or reject
+</ParamField>
+
+<ParamField path="action" type="'approve' | 'reject'" required>
+  Whether to approve or reject the requests
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array<{ status: string, jid: string }>>">
+  Returns an array of results for each participant
+</ResponseField>
+
+```typescript
+// Approve requests
+await sock.groupRequestParticipantsUpdate(
+  '123456789@g.us',
+  ['1234567890@s.whatsapp.net'],
+  'approve'
+)
+
+// Reject requests
+await sock.groupRequestParticipantsUpdate(
+  '123456789@g.us',
+  ['1234567890@s.whatsapp.net'],
+  'reject'
+)
+```
+
+## Group Settings
+
+### groupSettingUpdate
+
+Update group settings for announcements or edit permissions.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="setting" type="'announcement' | 'not_announcement' | 'locked' | 'unlocked'" required>
+  - `announcement`: Only admins can send messages
+  - `not_announcement`: All members can send messages
+  - `locked`: Only admins can edit group info
+  - `unlocked`: All members can edit group info
+</ParamField>
+
+```typescript
+// Make announcement-only group
+await sock.groupSettingUpdate('123456789@g.us', 'announcement')
+
+// Lock group settings to admins only
+await sock.groupSettingUpdate('123456789@g.us', 'locked')
+```
+
+### groupToggleEphemeral
+
+Enable or disable disappearing messages in a group.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="ephemeralExpiration" type="number" required>
+  Expiration duration in seconds (e.g., 86400 for 24 hours), or 0 to disable
+</ParamField>
+
+```typescript
+// Enable 7-day disappearing messages
+await sock.groupToggleEphemeral('123456789@g.us', 604800)
+
+// Disable disappearing messages
+await sock.groupToggleEphemeral('123456789@g.us', 0)
+```
+
+### groupMemberAddMode
+
+Control who can add members to the group.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="mode" type="'admin_add' | 'all_member_add'" required>
+  - `admin_add`: Only admins can add members
+  - `all_member_add`: All members can add members
+</ParamField>
+
+```typescript
+// Only admins can add members
+await sock.groupMemberAddMode('123456789@g.us', 'admin_add')
+
+// All members can add members
+await sock.groupMemberAddMode('123456789@g.us', 'all_member_add')
+```
+
+### groupJoinApprovalMode
+
+Enable or disable join approval mode for the group.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="mode" type="'on' | 'off'" required>
+  Whether to enable or disable join approval
+</ParamField>
+
+```typescript
+// Enable join approval
+await sock.groupJoinApprovalMode('123456789@g.us', 'on')
+
+// Disable join approval
+await sock.groupJoinApprovalMode('123456789@g.us', 'off')
+```
+
+## Group Invites
+
+### groupInviteCode
+
+Get the invite code for a group.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ResponseField name="return" type="Promise<string | undefined>">
+  Returns the group invite code
+</ResponseField>
+
+```typescript
+const code = await sock.groupInviteCode('123456789@g.us')
+console.log('Invite link: https://chat.whatsapp.com/' + code)
+```
+
+### groupRevokeInvite
+
+Revoke the current invite code and generate a new one.
+
+<ParamField path="jid" type="string" required>
+  The group JID
+</ParamField>
+
+<ResponseField name="return" type="Promise<string | undefined>">
+  Returns the new invite code
+</ResponseField>
+
+```typescript
+const newCode = await sock.groupRevokeInvite('123456789@g.us')
+```
+
+### groupAcceptInvite
+
+Join a group using an invite code.
+
+<ParamField path="code" type="string" required>
+  The group invite code
+</ParamField>
+
+<ResponseField name="return" type="Promise<string | undefined>">
+  Returns the JID of the joined group
+</ResponseField>
+
+```typescript
+const groupJid = await sock.groupAcceptInvite('INVITE_CODE_HERE')
+console.log('Joined group:', groupJid)
+```
+
+### groupGetInviteInfo
+
+Get information about a group from its invite code without joining.
+
+<ParamField path="code" type="string" required>
+  The group invite code
+</ParamField>
+
+<ResponseField name="return" type="Promise<GroupMetadata>">
+  Returns the group metadata
+</ResponseField>
+
+```typescript
+const info = await sock.groupGetInviteInfo('INVITE_CODE_HERE')
+console.log('Group name:', info.subject)
+console.log('Participants:', info.size)
+```
+
+### groupAcceptInviteV4
+
+Accept a v4 group invite message.
+
+<ParamField path="key" type="string | WAMessageKey" required>
+  The message key or JID of the person who sent the invite
+</ParamField>
+
+<ParamField path="inviteMessage" type="proto.Message.IGroupInviteMessage" required>
+  The group invite message object
+</ParamField>
+
+<ResponseField name="return" type="Promise<string>">
+  Returns the group JID
+</ResponseField>
+
+```typescript
+const groupJid = await sock.groupAcceptInviteV4(
+  messageKey,
+  inviteMessage
+)
+```
+
+### groupRevokeInviteV4
+
+Revoke a v4 invite for a specific person.
+
+<ParamField path="groupJid" type="string" required>
+  The group JID
+</ParamField>
+
+<ParamField path="invitedJid" type="string" required>
+  The JID of the person whose invite to revoke
+</ParamField>
+
+<ResponseField name="return" type="Promise<boolean>">
+  Returns true if successful
+</ResponseField>
+
+```typescript
+await sock.groupRevokeInviteV4(
+  '123456789@g.us',
+  '1234567890@s.whatsapp.net'
+)
+```

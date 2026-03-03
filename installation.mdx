@@ -1,0 +1,211 @@
+---
+title: Installation
+description: Install Baileys and get your development environment ready
+---
+
+# Installation
+
+Get started with Baileys by installing it via your preferred package manager.
+
+## Requirements
+
+Before installing Baileys, ensure your environment meets these requirements:
+
+- **Node.js**: Version 20.0.0 or higher
+- **Package Manager**: npm, yarn, or pnpm
+
+<Note>
+Baileys requires Node.js 20+ due to dependencies on modern JavaScript features and native modules.
+</Note>
+
+## Install Baileys
+
+Choose your preferred package manager to install Baileys:
+
+<CodeGroup>
+```bash npm
+npm install @whiskeysockets/baileys
+```
+
+```bash yarn
+yarn add @whiskeysockets/baileys
+```
+
+```bash pnpm
+pnpm add @whiskeysockets/baileys
+```
+</CodeGroup>
+
+### Install the edge version
+
+If you need the latest features and bug fixes (with no stability guarantee), you can install directly from GitHub:
+
+<CodeGroup>
+```bash npm
+npm install github:WhiskeySockets/Baileys
+```
+
+```bash yarn
+yarn add github:WhiskeySockets/Baileys
+```
+
+```bash pnpm
+pnpm add github:WhiskeySockets/Baileys
+```
+</CodeGroup>
+
+<Warning>
+The edge version may contain breaking changes and unstable features. Use it only if you need specific unreleased functionality.
+</Warning>
+
+## Optional dependencies
+
+Baileys includes several optional peer dependencies that enable additional features:
+
+### Media processing
+
+For automatic thumbnail generation and image processing:
+
+<CodeGroup>
+```bash npm
+npm install sharp
+# or
+npm install jimp
+```
+
+```bash yarn
+yarn add sharp
+# or
+yarn add jimp
+```
+
+```bash pnpm
+pnpm add sharp
+# or
+pnpm add jimp
+```
+</CodeGroup>
+
+<Tip>
+`sharp` is recommended over `jimp` for better performance and image quality.
+</Tip>
+
+### Link previews
+
+To enable automatic link preview generation in messages:
+
+<CodeGroup>
+```bash npm
+npm install link-preview-js
+```
+
+```bash yarn
+yarn add link-preview-js
+```
+
+```bash pnpm
+pnpm add link-preview-js
+```
+</CodeGroup>
+
+### Audio processing
+
+For audio decoding and processing:
+
+<CodeGroup>
+```bash npm
+npm install audio-decode
+```
+
+```bash yarn
+yarn add audio-decode
+```
+
+```bash pnpm
+pnpm add audio-decode
+```
+</CodeGroup>
+
+## Additional tools
+
+### FFmpeg (for video thumbnails)
+
+To generate thumbnails for video messages, install FFmpeg on your system:
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt update
+sudo apt install ffmpeg
+```
+
+```bash macOS
+brew install ffmpeg
+```
+
+```bash Windows
+# Download from https://ffmpeg.org/download.html
+# Or use chocolatey:
+choco install ffmpeg
+```
+</CodeGroup>
+
+### Audio conversion
+
+For audio messages to work properly across all devices, you need to convert them to Opus format. Install FFmpeg (shown above) and use these flags:
+
+```bash
+ffmpeg -i input.mp4 -avoid_negative_ts make_zero -ac 1 output.ogg
+```
+
+The required flags are:
+- `codec: libopus` - OGG file format
+- `ac: 1` - One audio channel (mono)
+- `avoid_negative_ts make_zero` - Timestamp handling
+
+## Import Baileys
+
+Once installed, import Baileys in your TypeScript or JavaScript files:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+```
+
+For specific features, you can import additional utilities:
+
+```typescript
+import makeWASocket, { 
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  makeInMemoryStore
+} from '@whiskeysockets/baileys'
+```
+
+## Verify installation
+
+Create a simple test file to verify everything is working:
+
+```typescript test.ts
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+  printQRInTerminal: true
+})
+
+console.log('Baileys is ready!')
+```
+
+Run it with:
+
+```bash
+npx tsx test.ts
+```
+
+If you see "Baileys is ready!" and a QR code, your installation is successful.
+
+## Next steps
+
+<Card title="Quick start guide" icon="bolt" href="/quickstart">
+  Learn how to create your first WhatsApp bot with Baileys
+</Card>

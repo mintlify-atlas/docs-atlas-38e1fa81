@@ -1,0 +1,528 @@
+---
+title: 'Message Utilities'
+description: 'Message generation, downloading, and manipulation utilities'
+icon: 'message'
+---
+
+## Message Generation
+
+### generateWAMessage
+
+Generates a complete WhatsApp message with all metadata.
+
+```typescript
+async function generateWAMessage(
+  jid: string,
+  content: AnyMessageContent,
+  options: MessageGenerationOptions
+): Promise<WAMessage>
+```
+
+<ParamField path="jid" type="string" required>
+  Recipient JID (chat identifier)
+</ParamField>
+
+<ParamField path="content" type="AnyMessageContent" required>
+  Message content - can be text, media, location, contact, etc.
+  
+  <Expandable title="content types">
+    - `{ text: string }` - Text message
+    - `{ image: WAMediaUpload }` - Image message
+    - `{ video: WAMediaUpload }` - Video message
+    - `{ audio: WAMediaUpload }` - Audio message
+    - `{ document: WAMediaUpload }` - Document message
+    - `{ sticker: WAMediaUpload }` - Sticker message
+    - `{ location: LocationMessage }` - Location share
+    - `{ contacts: ContactsArrayMessage }` - Contact card
+    - `{ poll: PollMessage }` - Poll message
+    - `{ react: ReactionMessage }` - Reaction to message
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="MessageGenerationOptions" required>
+  Message generation options
+  
+  <Expandable title="properties">
+    <ParamField path="userJid" type="string" required>
+      Your JID (user identifier)
+    </ParamField>
+    
+    <ParamField path="upload" type="WAMediaUploadFunction" required>
+      Function to upload media files
+    </ParamField>
+    
+    <ParamField path="quoted" type="WAMessage">
+      Message to quote/reply to
+    </ParamField>
+    
+    <ParamField path="ephemeralExpiration" type="number">
+      Disappearing message timer (in seconds)
+    </ParamField>
+    
+    <ParamField path="messageId" type="string">
+      Custom message ID (auto-generated if not provided)
+    </ParamField>
+    
+    <ParamField path="logger" type="ILogger">
+      Logger instance
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="WAMessage">
+  Complete WhatsApp message ready to send
+</ResponseField>
+
+**Example:**
+```typescript
+const msg = await generateWAMessage(
+  '1234567890@s.whatsapp.net',
+  { text: 'Hello!' },
+  {
+    userJid: sock.user.id,
+    upload: sock.waUploadToServer,
+    logger
+  }
+)
+```
+
+---
+
+### generateWAMessageContent
+
+Generates the content portion of a WhatsApp message.
+
+```typescript
+async function generateWAMessageContent(
+  message: AnyMessageContent,
+  options: MessageContentGenerationOptions
+): Promise<WAMessageContent>
+```
+
+<ParamField path="message" type="AnyMessageContent" required>
+  Raw message content to generate
+</ParamField>
+
+<ParamField path="options" type="MessageContentGenerationOptions" required>
+  Content generation options including upload function and media cache
+</ParamField>
+
+<ResponseField name="return" type="WAMessageContent">
+  Generated message content ready for protobuf encoding
+</ResponseField>
+
+---
+
+### generateWAMessageFromContent
+
+Generates a WAMessage from already-prepared message content.
+
+```typescript
+function generateWAMessageFromContent(
+  jid: string,
+  message: WAMessageContent,
+  options: MessageGenerationOptionsFromContent
+): WAMessage
+```
+
+<ParamField path="jid" type="string" required>
+  Recipient JID
+</ParamField>
+
+<ParamField path="message" type="WAMessageContent" required>
+  Pre-generated message content
+</ParamField>
+
+<ParamField path="options" type="MessageGenerationOptionsFromContent" required>
+  Options including userJid, timestamp, quoted message, and ephemeral settings
+</ParamField>
+
+<ResponseField name="return" type="WAMessage">
+  Complete WAMessage with key and metadata
+</ResponseField>
+
+---
+
+## Media Operations
+
+### downloadMediaMessage
+
+Downloads media from a message. Supports automatic re-upload requests on failure.
+
+```typescript
+async function downloadMediaMessage<Type extends 'buffer' | 'stream'>(
+  message: WAMessage,
+  type: Type,
+  options: MediaDownloadOptions,
+  ctx?: DownloadMediaMessageContext
+): Promise<Type extends 'buffer' ? Buffer : Transform>
+```
+
+<ParamField path="message" type="WAMessage" required>
+  The message containing media to download
+</ParamField>
+
+<ParamField path="type" type="'buffer' | 'stream'" required>
+  Whether to return a Buffer or Stream
+</ParamField>
+
+<ParamField path="options" type="MediaDownloadOptions" required>
+  Download options
+  
+  <Expandable title="properties">
+    <ParamField path="startByte" type="number">
+      Start downloading from specific byte (for partial downloads)
+    </ParamField>
+    
+    <ParamField path="endByte" type="number">
+      Stop downloading at specific byte
+    </ParamField>
+    
+    <ParamField path="options" type="RequestInit">
+      Additional fetch options
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="ctx" type="DownloadMediaMessageContext">
+  Optional context for automatic re-upload requests
+  
+  <Expandable title="properties">
+    <ParamField path="reuploadRequest" type="function">
+      Function to request media re-upload from sender
+    </ParamField>
+    
+    <ParamField path="logger" type="ILogger">
+      Logger instance
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Buffer | Transform">
+  Downloaded media as Buffer or Stream depending on type parameter
+</ResponseField>
+
+<Info>
+  When a 404 or 410 error occurs, the function automatically requests re-upload from the sender if context is provided.
+</Info>
+
+**Example:**
+```typescript
+// Download as buffer
+const buffer = await downloadMediaMessage(
+  message,
+  'buffer',
+  {},
+  { reuploadRequest: sock.updateMediaMessage, logger }
+)
+
+await fs.writeFile('media.jpg', buffer)
+
+// Download as stream
+const stream = await downloadMediaMessage(message, 'stream', {})
+stream.pipe(fs.createWriteStream('media.jpg'))
+```
+
+---
+
+### prepareWAMessageMedia
+
+Prepares media for sending by encrypting and uploading it.
+
+```typescript
+async function prepareWAMessageMedia(
+  message: AnyMediaMessageContent,
+  options: MessageContentGenerationOptions
+): Promise<WAMessageContent>
+```
+
+<ParamField path="message" type="AnyMediaMessageContent" required>
+  Media message content to prepare
+  
+  <Expandable title="supported types">
+    - `{ image: WAMediaUpload, caption?: string }`
+    - `{ video: WAMediaUpload, caption?: string, ptv?: boolean }`
+    - `{ audio: WAMediaUpload, ptt?: boolean }`
+    - `{ document: WAMediaUpload, fileName?: string, mimetype?: string }`
+    - `{ sticker: WAMediaUpload }`
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="MessageContentGenerationOptions" required>
+  Options including upload function, media cache, and logger
+</ParamField>
+
+<ResponseField name="return" type="WAMessageContent">
+  Prepared message content with encrypted media URL
+</ResponseField>
+
+**Features:**
+- Automatic thumbnail generation for images and videos
+- Audio duration detection
+- Waveform generation for voice messages (ptt)
+- Media caching to avoid re-uploads
+- Encryption and hashing
+
+---
+
+## Message Helpers
+
+### getContentType
+
+Extracts the content type key from a message.
+
+```typescript
+function getContentType(
+  content: proto.IMessage | undefined
+): keyof proto.IMessage | undefined
+```
+
+<ParamField path="content" type="proto.IMessage">
+  Message content to analyze
+</ParamField>
+
+<ResponseField name="return" type="string">
+  The key representing the message type (e.g., 'conversation', 'imageMessage', 'videoMessage')
+</ResponseField>
+
+**Example:**
+```typescript
+const msgType = getContentType(message.message)
+// Returns: 'conversation', 'imageMessage', 'videoMessage', etc.
+```
+
+---
+
+### normalizeMessageContent
+
+Normalizes ephemeral and view-once messages to regular content.
+
+```typescript
+function normalizeMessageContent(
+  content: WAMessageContent | null | undefined
+): WAMessageContent | undefined
+```
+
+<ParamField path="content" type="WAMessageContent">
+  Message content to normalize
+</ParamField>
+
+<ResponseField name="return" type="WAMessageContent">
+  Unwrapped message content (extracts inner message from ephemeral/viewOnce wrappers)
+</ResponseField>
+
+**Example:**
+```typescript
+const normalized = normalizeMessageContent(message.message)
+// Extracts actual content from ephemeralMessage, viewOnceMessage, etc.
+```
+
+---
+
+### extractMessageContent
+
+Extracts the true message content, including from template messages.
+
+```typescript
+function extractMessageContent(
+  content: WAMessageContent | undefined | null
+): WAMessageContent | undefined
+```
+
+<ResponseField name="return" type="WAMessageContent">
+  Extracted core message content
+</ResponseField>
+
+---
+
+### getDevice
+
+Predicts the device type based on message ID pattern.
+
+```typescript
+function getDevice(id: string): 'ios' | 'web' | 'android' | 'desktop' | 'unknown'
+```
+
+<ParamField path="id" type="string" required>
+  Message ID to analyze
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Detected device type based on ID pattern
+</ResponseField>
+
+**Example:**
+```typescript
+const device = getDevice(message.key.id)
+// Returns: 'ios', 'android', 'web', 'desktop', or 'unknown'
+```
+
+---
+
+### generateForwardMessageContent
+
+Generates content for forwarding a message.
+
+```typescript
+function generateForwardMessageContent(
+  message: WAMessage,
+  forceForward?: boolean
+): WAMessageContent
+```
+
+<ParamField path="message" type="WAMessage" required>
+  The message to forward
+</ParamField>
+
+<ParamField path="forceForward" type="boolean">
+  Force showing as forwarded even if from you (default: false)
+</ParamField>
+
+<ResponseField name="return" type="WAMessageContent">
+  Message content configured for forwarding with incremented forwarding score
+</ResponseField>
+
+**Example:**
+```typescript
+const forwardContent = generateForwardMessageContent(originalMessage)
+
+await sock.sendMessage(recipientJid, forwardContent)
+```
+
+---
+
+## Message Aggregation
+
+### getAggregateVotesInPollMessage
+
+Aggregates all votes in a poll message.
+
+```typescript
+function getAggregateVotesInPollMessage(
+  message: Pick<WAMessage, 'pollUpdates' | 'message'>,
+  meId?: string
+): Array<{ name: string; voters: string[] }>
+```
+
+<ParamField path="message" type="WAMessage" required>
+  Poll message with updates
+</ParamField>
+
+<ParamField path="meId" type="string">
+  Your JID for attribution
+</ParamField>
+
+<ResponseField name="return" type="Array">
+  List of poll options with their voters
+  
+  <Expandable title="array items">
+    <ResponseField name="name" type="string">
+      Poll option text
+    </ResponseField>
+    
+    <ResponseField name="voters" type="string[]">
+      Array of JIDs who voted for this option
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```typescript
+const votes = getAggregateVotesInPollMessage(pollMessage, sock.user.id)
+// [
+//   { name: 'Option 1', voters: ['user1@s.whatsapp.net', 'user2@s.whatsapp.net'] },
+//   { name: 'Option 2', voters: ['user3@s.whatsapp.net'] }
+// ]
+```
+
+---
+
+### updateMessageWithReaction
+
+Updates a message with a new reaction.
+
+```typescript
+function updateMessageWithReaction(
+  msg: Pick<WAMessage, 'reactions'>,
+  reaction: proto.IReaction
+): void
+```
+
+<ParamField path="msg" type="WAMessage" required>
+  Message to update (mutated in place)
+</ParamField>
+
+<ParamField path="reaction" type="proto.IReaction" required>
+  Reaction data to add/update
+</ParamField>
+
+---
+
+### updateMessageWithPollUpdate
+
+Updates a message with a new poll vote.
+
+```typescript
+function updateMessageWithPollUpdate(
+  msg: Pick<WAMessage, 'pollUpdates'>,
+  update: proto.IPollUpdate
+): void
+```
+
+---
+
+## URL Utilities
+
+### extractUrlFromText
+
+Extracts the first URL from text using regex.
+
+```typescript
+function extractUrlFromText(text: string): string | undefined
+```
+
+<ParamField path="text" type="string" required>
+  Text to search for URLs
+</ParamField>
+
+<ResponseField name="return" type="string">
+  First URL found in the text, or undefined
+</ResponseField>
+
+**Example:**
+```typescript
+const url = extractUrlFromText('Check out https://example.com')
+// Returns: 'https://example.com'
+```
+
+---
+
+### generateLinkPreviewIfRequired
+
+Generates link preview metadata if URL is detected.
+
+```typescript
+async function generateLinkPreviewIfRequired(
+  text: string,
+  getUrlInfo: (url: string) => Promise<WAUrlInfo>,
+  logger?: ILogger
+): Promise<WAUrlInfo | undefined>
+```
+
+<ResponseField name="return" type="WAUrlInfo">
+  Link preview metadata including title, description, and thumbnail
+</ResponseField>
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Media Utilities" icon="photo-film" href="/messages/sending-media">
+    Detailed guide on media message handling
+  </Card>
+  
+  <Card title="Socket Events" icon="bolt" href="/api/events">
+    Message events and event handling
+  </Card>
+</CardGroup>

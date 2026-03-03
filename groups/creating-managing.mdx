@@ -1,0 +1,122 @@
+---
+title: Creating and Managing Groups
+description: Learn how to create WhatsApp groups and manage basic group operations
+---
+
+## Creating a Group
+
+You can create a new WhatsApp group by providing a name (subject) and a list of participant JIDs.
+
+```typescript
+const group = await sock.groupCreate(
+  'My Fab Group',
+  ['1234@s.whatsapp.net', '4564@s.whatsapp.net']
+)
+
+console.log('created group with id: ' + group.id)
+
+// Send a welcome message to the group
+await sock.sendMessage(group.id, { text: 'hello there' })
+```
+
+### Method Signature
+
+```typescript
+groupCreate(subject: string, participants: string[]): Promise<GroupMetadata>
+```
+
+**Parameters:**
+- `subject` - The name of the group
+- `participants` - Array of participant JIDs in the format `[country code][phone number]@s.whatsapp.net`
+
+**Returns:** A `GroupMetadata` object containing the group's ID and other metadata
+
+<Note>
+You must include at least one participant when creating a group. Group IDs are in the format `123456789-123345@g.us`.
+</Note>
+
+## Updating Group Subject
+
+Change the group's name (subject) using the `groupUpdateSubject` method.
+
+```typescript
+await sock.groupUpdateSubject(jid, 'New Subject!')
+```
+
+### Method Signature
+
+```typescript
+groupUpdateSubject(jid: string, subject: string): Promise<void>
+```
+
+**Parameters:**
+- `jid` - The group JID
+- `subject` - The new group name
+
+<Warning>
+You must be a group admin to update the subject. The operation will fail if you don't have admin privileges.
+</Warning>
+
+## Updating Group Description
+
+Update or remove the group's description.
+
+```typescript
+// Set a new description
+await sock.groupUpdateDescription(jid, 'New Description!')
+
+// Remove the description
+await sock.groupUpdateDescription(jid, undefined)
+```
+
+### Method Signature
+
+```typescript
+groupUpdateDescription(jid: string, description?: string): Promise<void>
+```
+
+**Parameters:**
+- `jid` - The group JID
+- `description` - The new description text, or `undefined` to remove it
+
+<Note>
+The method automatically handles description versioning by retrieving the current description ID before updating.
+</Note>
+
+## Leaving a Group
+
+You can leave a group using the `groupLeave` method.
+
+```typescript
+// Leave the group
+await sock.groupLeave(jid)
+```
+
+### Method Signature
+
+```typescript
+groupLeave(id: string): Promise<void>
+```
+
+**Parameters:**
+- `id` - The group JID
+
+<Warning>
+This operation will throw an error if it fails. Once you leave a group, you'll need an invite to rejoin.
+</Warning>
+
+## Best Practices
+
+<Steps>
+  <Step title="Verify admin status">
+    Before attempting to modify group properties, ensure you have admin privileges using `groupMetadata` to check your participant status.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    Wrap group operations in try-catch blocks, as they will throw errors if you lack permissions or if the operation fails.
+  </Step>
+  
+  <Step title="Cache group metadata">
+    Implement group metadata caching to reduce API calls. See the [Settings & Metadata](/groups/settings-metadata) page for details.
+  </Step>
+</Steps>

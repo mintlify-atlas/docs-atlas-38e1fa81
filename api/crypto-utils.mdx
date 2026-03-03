@@ -1,0 +1,736 @@
+---
+title: 'Cryptography Utilities'
+description: 'Encryption, decryption, and Signal protocol utilities'
+icon: 'lock'
+---
+
+## Curve Cryptography
+
+### Curve.generateKeyPair
+
+Generates a new Curve25519 key pair for Signal protocol.
+
+```typescript
+Curve.generateKeyPair(): KeyPair
+```
+
+<ResponseField name="return" type="KeyPair">
+  A new cryptographic key pair
+  
+  <Expandable title="properties">
+    <ResponseField name="private" type="Buffer">
+      Private key (32 bytes)
+    </ResponseField>
+    
+    <ResponseField name="public" type="Buffer">
+      Public key (32 bytes, without version byte)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```typescript
+const keyPair = Curve.generateKeyPair()
+console.log(keyPair.public) // Buffer of 32 bytes
+```
+
+---
+
+### Curve.sharedKey
+
+Computes a shared secret using ECDH (Elliptic Curve Diffie-Hellman).
+
+```typescript
+Curve.sharedKey(
+  privateKey: Uint8Array,
+  publicKey: Uint8Array
+): Buffer
+```
+
+<ParamField path="privateKey" type="Uint8Array" required>
+  Your private key
+</ParamField>
+
+<ParamField path="publicKey" type="Uint8Array" required>
+  Other party's public key
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Shared secret derived from the key agreement
+</ResponseField>
+
+---
+
+### Curve.sign
+
+Creates a cryptographic signature for data.
+
+```typescript
+Curve.sign(
+  privateKey: Uint8Array,
+  buf: Uint8Array
+): Uint8Array
+```
+
+<ParamField path="privateKey" type="Uint8Array" required>
+  Private key for signing
+</ParamField>
+
+<ParamField path="buf" type="Uint8Array" required>
+  Data to sign
+</ParamField>
+
+<ResponseField name="return" type="Uint8Array">
+  Cryptographic signature
+</ResponseField>
+
+---
+
+### Curve.verify
+
+Verifies a cryptographic signature.
+
+```typescript
+Curve.verify(
+  pubKey: Uint8Array,
+  message: Uint8Array,
+  signature: Uint8Array
+): boolean
+```
+
+<ParamField path="pubKey" type="Uint8Array" required>
+  Public key of the signer
+</ParamField>
+
+<ParamField path="message" type="Uint8Array" required>
+  Original message that was signed
+</ParamField>
+
+<ParamField path="signature" type="Uint8Array" required>
+  Signature to verify
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  True if signature is valid, false otherwise
+</ResponseField>
+
+---
+
+## AES Encryption
+
+### aesEncryptGCM
+
+Encrypts data using AES-256-GCM with authentication.
+
+```typescript
+function aesEncryptGCM(
+  plaintext: Uint8Array,
+  key: Uint8Array,
+  iv: Uint8Array,
+  additionalData: Uint8Array
+): Buffer
+```
+
+<ParamField path="plaintext" type="Uint8Array" required>
+  Data to encrypt
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  256-bit encryption key (32 bytes)
+</ParamField>
+
+<ParamField path="iv" type="Uint8Array" required>
+  Initialization vector (16 bytes)
+</ParamField>
+
+<ParamField path="additionalData" type="Uint8Array" required>
+  Additional authenticated data (not encrypted but authenticated)
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Encrypted ciphertext with authentication tag appended
+</ResponseField>
+
+<Info>
+  The authentication tag (16 bytes) is automatically appended to the ciphertext.
+</Info>
+
+---
+
+### aesDecryptGCM
+
+Decrypts AES-256-GCM encrypted data and verifies authentication.
+
+```typescript
+function aesDecryptGCM(
+  ciphertext: Uint8Array,
+  key: Uint8Array,
+  iv: Uint8Array,
+  additionalData: Uint8Array
+): Buffer
+```
+
+<ParamField path="ciphertext" type="Uint8Array" required>
+  Encrypted data with authentication tag appended
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  256-bit decryption key (32 bytes)
+</ParamField>
+
+<ParamField path="iv" type="Uint8Array" required>
+  Initialization vector (16 bytes)
+</ParamField>
+
+<ParamField path="additionalData" type="Uint8Array" required>
+  Additional authenticated data used during encryption
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Decrypted plaintext
+</ResponseField>
+
+<Warning>
+  Throws an error if authentication fails or data has been tampered with.
+</Warning>
+
+---
+
+### aesEncryptCTR
+
+Encrypts data using AES-256-CTR mode.
+
+```typescript
+function aesEncryptCTR(
+  plaintext: Uint8Array,
+  key: Uint8Array,
+  iv: Uint8Array
+): Buffer
+```
+
+<ParamField path="plaintext" type="Uint8Array" required>
+  Data to encrypt
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  256-bit encryption key
+</ParamField>
+
+<ParamField path="iv" type="Uint8Array" required>
+  Counter initialization vector
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Encrypted ciphertext
+</ResponseField>
+
+---
+
+### aesDecryptCTR
+
+Decrypts AES-256-CTR encrypted data.
+
+```typescript
+function aesDecryptCTR(
+  ciphertext: Uint8Array,
+  key: Uint8Array,
+  iv: Uint8Array
+): Buffer
+```
+
+---
+
+### aesEncrypt
+
+Encrypts data using AES-256-CBC with a random IV prepended.
+
+```typescript
+function aesEncrypt(
+  buffer: Uint8Array,
+  key: Uint8Array
+): Buffer
+```
+
+<ParamField path="buffer" type="Uint8Array" required>
+  Data to encrypt
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  256-bit encryption key
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Random IV (16 bytes) prepended to the ciphertext
+</ResponseField>
+
+---
+
+### aesDecrypt
+
+Decrypts AES-256-CBC encrypted data where IV is prepended.
+
+```typescript
+function aesDecrypt(
+  buffer: Uint8Array,
+  key: Uint8Array
+): Buffer
+```
+
+<ParamField path="buffer" type="Uint8Array" required>
+  IV-prepended ciphertext (first 16 bytes are IV)
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  256-bit decryption key
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Decrypted plaintext
+</ResponseField>
+
+---
+
+### aesEncryptWithIV
+
+Encrypts data using AES-256-CBC with a provided IV.
+
+```typescript
+function aesEncrypWithIV(
+  buffer: Buffer,
+  key: Buffer,
+  IV: Buffer
+): Buffer
+```
+
+---
+
+### aesDecryptWithIV
+
+Decrypts AES-256-CBC encrypted data with a provided IV.
+
+```typescript
+function aesDecryptWithIV(
+  buffer: Uint8Array,
+  key: Uint8Array,
+  IV: Uint8Array
+): Buffer
+```
+
+---
+
+## Hashing & HMAC
+
+### sha256
+
+Computes SHA-256 hash of data.
+
+```typescript
+function sha256(buffer: Buffer): Buffer
+```
+
+<ParamField path="buffer" type="Buffer" required>
+  Data to hash
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  SHA-256 hash (32 bytes)
+</ResponseField>
+
+**Example:**
+```typescript
+const hash = sha256(Buffer.from('hello world'))
+console.log(hash.toString('hex'))
+```
+
+---
+
+### hmacSign
+
+Creates HMAC signature using SHA-256 or SHA-512.
+
+```typescript
+function hmacSign(
+  buffer: Buffer | Uint8Array,
+  key: Buffer | Uint8Array,
+  variant?: 'sha256' | 'sha512'
+): Buffer
+```
+
+<ParamField path="buffer" type="Buffer | Uint8Array" required>
+  Data to sign
+</ParamField>
+
+<ParamField path="key" type="Buffer | Uint8Array" required>
+  HMAC key
+</ParamField>
+
+<ParamField path="variant" type="'sha256' | 'sha512'">
+  Hash algorithm to use (default: 'sha256')
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  HMAC signature
+</ResponseField>
+
+---
+
+### hkdf
+
+HMAC-based Key Derivation Function for deriving keys.
+
+```typescript
+function hkdf(
+  buffer: Uint8Array | string,
+  expandedLength: number,
+  options?: { info?: string; salt?: Buffer }
+): Buffer
+```
+
+<ParamField path="buffer" type="Uint8Array | string" required>
+  Input key material
+</ParamField>
+
+<ParamField path="expandedLength" type="number" required>
+  Desired output length in bytes
+</ParamField>
+
+<ParamField path="options" type="object">
+  HKDF options
+  
+  <Expandable title="properties">
+    <ParamField path="info" type="string">
+      Application-specific context information
+    </ParamField>
+    
+    <ParamField path="salt" type="Buffer">
+      Optional salt value
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Derived key material of specified length
+</ResponseField>
+
+**Example:**
+```typescript
+const derivedKey = hkdf(
+  mediaKey,
+  112,
+  { info: 'WhatsApp Image Keys' }
+)
+```
+
+---
+
+## Media Encryption
+
+### getMediaKeys
+
+Generates all keys required for media encryption/decryption.
+
+```typescript
+async function getMediaKeys(
+  buffer: Uint8Array | string | null | undefined,
+  mediaType: MediaType
+): Promise<MediaDecryptionKeyInfo>
+```
+
+<ParamField path="buffer" type="Uint8Array | string" required>
+  Media key (base64 string or bytes)
+</ParamField>
+
+<ParamField path="mediaType" type="MediaType" required>
+  Type of media: 'image', 'video', 'audio', 'document', 'sticker', etc.
+</ParamField>
+
+<ResponseField name="return" type="MediaDecryptionKeyInfo">
+  Derived encryption keys
+  
+  <Expandable title="properties">
+    <ResponseField name="iv" type="Buffer">
+      Initialization vector (16 bytes)
+    </ResponseField>
+    
+    <ResponseField name="cipherKey" type="Buffer">
+      AES cipher key (32 bytes)
+    </ResponseField>
+    
+    <ResponseField name="macKey" type="Buffer">
+      HMAC key for authentication (32 bytes)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```typescript
+const { iv, cipherKey, macKey } = await getMediaKeys(
+  mediaMessage.mediaKey,
+  'image'
+)
+```
+
+---
+
+### encryptedStream
+
+Encrypts a media stream for WhatsApp upload.
+
+```typescript
+async function encryptedStream(
+  media: WAMediaUpload,
+  mediaType: MediaType,
+  options?: EncryptedStreamOptions
+): Promise<{
+  mediaKey: Buffer
+  encFilePath: string
+  originalFilePath?: string
+  mac: Buffer
+  fileEncSha256: Buffer
+  fileSha256: Buffer
+  fileLength: number
+}>
+```
+
+<ParamField path="media" type="WAMediaUpload" required>
+  Media to encrypt - can be Buffer, stream, or file path/URL
+</ParamField>
+
+<ParamField path="mediaType" type="MediaType" required>
+  Type of media being encrypted
+</ParamField>
+
+<ParamField path="options" type="EncryptedStreamOptions">
+  Encryption options
+  
+  <Expandable title="properties">
+    <ParamField path="saveOriginalFileIfRequired" type="boolean">
+      Whether to save original unencrypted file for processing
+    </ParamField>
+    
+    <ParamField path="logger" type="ILogger">
+      Logger instance
+    </ParamField>
+    
+    <ParamField path="opts" type="RequestInit">
+      Fetch options for remote URLs
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="return" type="object">
+  Encryption result with all necessary metadata
+  
+  <Expandable title="properties">
+    <ResponseField name="mediaKey" type="Buffer">
+      Generated media encryption key (32 bytes)
+    </ResponseField>
+    
+    <ResponseField name="encFilePath" type="string">
+      Path to encrypted temporary file
+    </ResponseField>
+    
+    <ResponseField name="originalFilePath" type="string">
+      Path to original file (if saveOriginalFileIfRequired was true)
+    </ResponseField>
+    
+    <ResponseField name="mac" type="Buffer">
+      HMAC authentication tag (10 bytes)
+    </ResponseField>
+    
+    <ResponseField name="fileEncSha256" type="Buffer">
+      SHA-256 of encrypted file
+    </ResponseField>
+    
+    <ResponseField name="fileSha256" type="Buffer">
+      SHA-256 of original file
+    </ResponseField>
+    
+    <ResponseField name="fileLength" type="number">
+      Length of original file in bytes
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### downloadContentFromMessage
+
+Downloads and decrypts media from a WhatsApp message.
+
+```typescript
+async function downloadContentFromMessage(
+  message: DownloadableMessage,
+  type: MediaType,
+  opts?: MediaDownloadOptions
+): Promise<Transform>
+```
+
+<ParamField path="message" type="DownloadableMessage" required>
+  Message containing media keys and URL
+  
+  <Expandable title="properties">
+    <ParamField path="mediaKey" type="Uint8Array" required>
+      Media encryption key
+    </ParamField>
+    
+    <ParamField path="directPath" type="string">
+      Direct path to media on WhatsApp servers
+    </ParamField>
+    
+    <ParamField path="url" type="string">
+      Full media URL
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="type" type="MediaType" required>
+  Type of media being downloaded
+</ParamField>
+
+<ParamField path="opts" type="MediaDownloadOptions">
+  Download options including byte range
+</ParamField>
+
+<ResponseField name="return" type="Transform">
+  Readable stream of decrypted media data
+</ResponseField>
+
+**Example:**
+```typescript
+const stream = await downloadContentFromMessage(
+  message.message.imageMessage,
+  'image'
+)
+
+const buffer = await streamToBuffer(stream)
+await fs.writeFile('image.jpg', buffer)
+```
+
+---
+
+## Signal Protocol
+
+### signedKeyPair
+
+Generates a signed pre-key pair for Signal protocol.
+
+```typescript
+function signedKeyPair(
+  identityKeyPair: KeyPair,
+  keyId: number
+): SignedKeyPair
+```
+
+<ParamField path="identityKeyPair" type="KeyPair" required>
+  Identity key pair for signing
+</ParamField>
+
+<ParamField path="keyId" type="number" required>
+  ID number for this signed pre-key
+</ParamField>
+
+<ResponseField name="return" type="SignedKeyPair">
+  Signed pre-key with signature
+  
+  <Expandable title="properties">
+    <ResponseField name="keyPair" type="KeyPair">
+      The generated key pair
+    </ResponseField>
+    
+    <ResponseField name="signature" type="Uint8Array">
+      Cryptographic signature of the public key
+    </ResponseField>
+    
+    <ResponseField name="keyId" type="number">
+      Key identifier
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### generateSignalPubKey
+
+Prefixes version byte to public keys for Signal protocol compatibility.
+
+```typescript
+function generateSignalPubKey(
+  pubKey: Uint8Array | Buffer
+): Buffer
+```
+
+<ParamField path="pubKey" type="Uint8Array | Buffer" required>
+  Public key (32 or 33 bytes)
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Public key with version byte prefix (33 bytes total)
+</ResponseField>
+
+---
+
+### derivePairingCodeKey
+
+Derives encryption key from pairing code using PBKDF2.
+
+```typescript
+async function derivePairingCodeKey(
+  pairingCode: string,
+  salt: Buffer
+): Promise<Buffer>
+```
+
+<ParamField path="pairingCode" type="string" required>
+  8-digit pairing code
+</ParamField>
+
+<ParamField path="salt" type="Buffer" required>
+  Salt for key derivation
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  Derived 32-byte encryption key
+</ResponseField>
+
+<Info>
+  Uses 131,072 iterations of PBKDF2 with SHA-256.
+</Info>
+
+---
+
+## Utility Functions
+
+### md5
+
+Computes MD5 hash (imported from whatsapp-rust-bridge).
+
+```typescript
+function md5(data: Uint8Array): Buffer
+```
+
+<ParamField path="data" type="Uint8Array" required>
+  Data to hash
+</ParamField>
+
+<ResponseField name="return" type="Buffer">
+  MD5 hash (16 bytes)
+</ResponseField>
+
+<Warning>
+  MD5 is cryptographically broken. Only use where required for WhatsApp protocol compatibility.
+</Warning>
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Auth Utilities" icon="key" href="/api/auth-utils">
+    Authentication and key management
+  </Card>
+  
+  <Card title="Media Operations" icon="photo-film" href="/messages/sending-media">
+    Complete media handling guide
+  </Card>
+</CardGroup>

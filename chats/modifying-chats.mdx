@@ -1,0 +1,181 @@
+---
+title: 'Modifying Chats'
+description: 'Learn how to modify chat properties like archiving, muting, pinning, deleting, and starring messages in Baileys'
+---
+
+## Overview
+
+Bailey uses an encrypted form of communication to manage chat modifications. You can archive, mute, pin, delete chats, and star messages using the `chatModify` function.
+
+<Warning>
+If you incorrectly format a chat modification, WhatsApp may log you out of all your devices and you'll have to log in again. Always ensure you're providing the correct parameters.
+</Warning>
+
+## Archive a Chat
+
+Archive a chat to hide it from your main chat list. You need to provide the last message in the chat.
+
+```typescript
+const lastMsgInChat = await getLastMessageInChat(jid) // implement this on your end
+await sock.chatModify({ archive: true, lastMessages: [lastMsgInChat] }, jid)
+```
+
+To unarchive:
+
+```typescript
+const lastMsgInChat = await getLastMessageInChat(jid)
+await sock.chatModify({ archive: false, lastMessages: [lastMsgInChat] }, jid)
+```
+
+## Mute/Unmute a Chat
+
+Mute a chat to stop receiving notifications. The mute duration is specified in milliseconds.
+
+### Supported Durations
+
+| Duration | Milliseconds |
+|----------|-------------|
+| Remove   | `null`      |
+| 8 hours  | `28800000`  |
+| 7 days   | `604800000` |
+
+```typescript
+// Mute for 8 hours
+await sock.chatModify({ mute: 8 * 60 * 60 * 1000 }, jid)
+
+// Mute for 7 days  
+await sock.chatModify({ mute: 7 * 24 * 60 * 60 * 1000 }, jid)
+
+// Unmute
+await sock.chatModify({ mute: null }, jid)
+```
+
+## Pin/Unpin a Chat
+
+Pin important chats to the top of your chat list.
+
+```typescript
+// Pin a chat
+await sock.chatModify({ pin: true }, jid)
+
+// Unpin a chat
+await sock.chatModify({ pin: false }, jid)
+```
+
+## Mark a Chat Read/Unread
+
+Mark a chat as read or unread. You need to provide the last message in the chat.
+
+```typescript
+const lastMsgInChat = await getLastMessageInChat(jid) // implement this on your end
+
+// Mark as read
+await sock.chatModify({ markRead: true, lastMessages: [lastMsgInChat] }, jid)
+
+// Mark as unread
+await sock.chatModify({ markRead: false, lastMessages: [lastMsgInChat] }, jid)
+```
+
+## Delete a Message for Me
+
+Delete specific messages from your view only (not for everyone).
+
+```typescript
+await sock.chatModify(
+  {
+    clear: {
+      messages: [
+        {
+          id: 'ATWYHDNNWU81732J',
+          fromMe: true,
+          timestamp: '1654823909'
+        }
+      ]
+    }
+  },
+  jid
+)
+```
+
+<Note>
+To delete a message for everyone, use `sock.sendMessage(jid, { delete: msg.key })` instead. See the [Sending Messages](/messages/sending-text) guide.
+</Note>
+
+## Delete a Chat
+
+Permanently delete an entire chat conversation. You need to provide the last message in the chat.
+
+```typescript
+const lastMsgInChat = await getLastMessageInChat(jid) // implement this on your end
+
+await sock.chatModify(
+  {
+    delete: true,
+    lastMessages: [
+      {
+        key: lastMsgInChat.key,
+        messageTimestamp: lastMsgInChat.messageTimestamp
+      }
+    ]
+  },
+  jid
+)
+```
+
+## Star/Unstar Messages
+
+Star important messages to easily find them later.
+
+```typescript
+// Star messages
+await sock.chatModify(
+  {
+    star: {
+      messages: [
+        {
+          id: 'messageID',
+          fromMe: true // or false
+        }
+      ],
+      star: true
+    }
+  },
+  jid
+)
+
+// Unstar messages
+await sock.chatModify(
+  {
+    star: {
+      messages: [
+        {
+          id: 'messageID',
+          fromMe: false
+        }
+      ],
+      star: false
+    }
+  },
+  jid
+)
+```
+
+You can star or unstar multiple messages at once by adding more message objects to the `messages` array.
+
+## Implementing getLastMessageInChat
+
+Many chat modifications require the last message in a chat. You need to implement this function using your data store:
+
+```typescript
+function getLastMessageInChat(jid: string) {
+  // Retrieve from your message store
+  // Return the most recent message object with:
+  // - key (WAMessageKey)
+  // - messageTimestamp (number)
+  return store.messages[jid]?.[store.messages[jid].length - 1]
+}
+```
+
+<Note>
+See the [Data Store](/concepts/store) guide for information on implementing message storage.
+</Note>

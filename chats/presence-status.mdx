@@ -1,0 +1,222 @@
+---
+title: 'Presence & Status'
+description: 'Learn how to send presence updates, subscribe to presence, and handle typing indicators in Baileys'
+---
+
+## Overview
+
+Presence updates let users know whether you're online, offline, typing, or recording. You can also subscribe to other users' presence to detect when they're online or typing.
+
+## Presence Types
+
+Baileys supports the following presence types:
+
+| Type | Description |
+|------|-------------|
+| `available` | User is online |
+| `unavailable` | User is offline |
+| `composing` | User is typing |
+| `recording` | User is recording audio |
+| `paused` | User stopped typing |
+
+## Send Presence Update
+
+Update your presence status to let others know your availability.
+
+### Set Online/Offline Status
+
+```typescript
+// Set yourself as available (online)
+await sock.sendPresenceUpdate('available')
+
+// Set yourself as unavailable (offline)
+await sock.sendPresenceUpdate('unavailable')
+```
+
+<Note>
+The presence expires after about 10 seconds. If you want to stay online, you need to periodically send presence updates.
+</Note>
+
+### Send Typing Indicators
+
+Show typing or recording indicators in specific chats.
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+
+// Show typing indicator
+await sock.sendPresenceUpdate('composing', jid)
+
+// Show recording indicator
+await sock.sendPresenceUpdate('recording', jid)
+
+// Stop typing (pause)
+await sock.sendPresenceUpdate('paused', jid)
+```
+
+<Tabs>
+  <Tab title="Typing Example">
+    ```typescript
+    const jid = '1234567890@s.whatsapp.net'
+    
+    // Start typing
+    await sock.sendPresenceUpdate('composing', jid)
+    
+    // Simulate typing for 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    
+    // Stop typing
+    await sock.sendPresenceUpdate('paused', jid)
+    
+    // Send message
+    await sock.sendMessage(jid, { text: 'Hello!' })
+    ```
+  </Tab>
+  <Tab title="Recording Example">
+    ```typescript
+    const jid = '1234567890@s.whatsapp.net'
+    
+    // Start recording indicator
+    await sock.sendPresenceUpdate('recording', jid)
+    
+    // Simulate recording for 5 seconds
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    
+    // Stop recording
+    await sock.sendPresenceUpdate('paused', jid)
+    
+    // Send voice message
+    await sock.sendMessage(jid, {
+      audio: { url: './audio.mp3' },
+      mimetype: 'audio/mp4'
+    })
+    ```
+  </Tab>
+</Tabs>
+
+## Subscribe to Presence Updates
+
+Subscribe to a user's or group's presence to receive real-time updates about their online status and typing indicators.
+
+```typescript
+const jid = '1234567890@s.whatsapp.net'
+
+// Subscribe to presence updates
+await sock.presenceSubscribe(jid)
+```
+
+### Listen for Presence Updates
+
+Once subscribed, listen for presence updates using the `presence.update` event.
+
+```typescript
+sock.ev.on('presence.update', ({ id, presences }) => {
+  console.log(`Presence update for ${id}:`, presences)
+  
+  // presences is an object mapping participant JID to presence data
+  for (const [participantJid, presence] of Object.entries(presences)) {
+    console.log(`${participantJid} is ${presence.lastKnownPresence}`)
+    
+    if (presence.lastSeen) {
+      console.log(`Last seen: ${new Date(presence.lastSeen * 1000)}`)
+    }
+  }
+})
+```
+
+### Presence Data Structure
+
+The presence data contains:
+
+```typescript
+interface PresenceData {
+  lastKnownPresence: 'unavailable' | 'available' | 'composing' | 'recording' | 'paused'
+  lastSeen?: number // Unix timestamp in seconds
+}
+```
+
+## Complete Example
+
+Here's a complete example showing how to track presence and respond to typing:
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({
+  // your config
+})
+
+// Subscribe to a contact's presence
+const contactJid = '1234567890@s.whatsapp.net'
+await sock.presenceSubscribe(contactJid)
+
+// Handle presence updates
+sock.ev.on('presence.update', async ({ id, presences }) => {
+  for (const [jid, presence] of Object.entries(presences)) {
+    if (presence.lastKnownPresence === 'composing') {
+      console.log(`${jid} is typing...`)
+    } else if (presence.lastKnownPresence === 'recording') {
+      console.log(`${jid} is recording...`)
+    } else if (presence.lastKnownPresence === 'available') {
+      console.log(`${jid} is online`)
+    } else if (presence.lastKnownPresence === 'unavailable') {
+      console.log(`${jid} is offline`)
+      
+      if (presence.lastSeen) {
+        const lastSeenDate = new Date(presence.lastSeen * 1000)
+        console.log(`Last seen: ${lastSeenDate.toLocaleString()}`)
+      }
+    }
+  }
+})
+
+// When sending a message, show typing indicator first
+async function sendMessageWithTyping(jid: string, text: string) {
+  // Show typing
+  await sock.sendPresenceUpdate('composing', jid)
+  
+  // Simulate typing delay
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  
+  // Send message
+  await sock.sendMessage(jid, { text })
+  
+  // Stop typing
+  await sock.sendPresenceUpdate('paused', jid)
+}
+
+await sendMessageWithTyping(contactJid, 'Hello, how are you?')
+```
+
+## Notifications on Mobile
+
+<Warning>
+If a desktop client is active, WhatsApp doesn't send push notifications to the mobile device. If you want to receive notifications on your phone while your bot is running, mark your Baileys client as offline:
+</Warning>
+
+```typescript
+// Mark offline to receive notifications on mobile
+await sock.sendPresenceUpdate('unavailable')
+```
+
+Alternatively, configure this on connection:
+
+```typescript
+const sock = makeWASocket({
+  markOnlineOnConnect: false // Don't auto-mark as online
+})
+```
+
+## Auto-Presence on Connection
+
+By default, Baileys marks you as online when the connection opens. You can disable this:
+
+```typescript
+const sock = makeWASocket({
+  auth: state,
+  markOnlineOnConnect: false // Stay offline on connect
+})
+
+// Later, manually go online
+await sock.sendPresenceUpdate('available')
+```

@@ -1,0 +1,824 @@
+---
+title: 'Message Types'
+description: 'Reference for all message content types in Baileys'
+---
+
+## AnyMessageContent
+
+Union type representing all possible message content types that can be sent.
+
+```typescript
+type AnyMessageContent =
+  | AnyRegularMessageContent
+  | { forward: WAMessage; force?: boolean }
+  | { delete: WAMessageKey }
+  | { disappearingMessagesInChat: boolean | number }
+  | { limitSharing: boolean }
+```
+
+## AnyRegularMessageContent
+
+Union type for standard message content types.
+
+```typescript
+type AnyRegularMessageContent = (
+  | TextMessageContent
+  | AnyMediaMessageContent
+  | { event: EventMessageOptions }
+  | PollMessageContent
+  | ContactsMessageContent
+  | LocationMessageContent
+  | { react: proto.Message.IReactionMessage }
+  | ButtonReplyMessageContent
+  | GroupInviteMessageContent
+  | ListReplyMessageContent
+  | PinMessageContent
+  | ProductMessageContent
+  | SharePhoneNumber
+  | RequestPhoneNumber
+) & ViewOnce
+```
+
+---
+
+## Text Messages
+
+### TextMessageContent
+
+Send text messages with optional mentions, link previews, and context.
+
+<ParamField body="text" type="string" required>
+  The text content of the message
+</ParamField>
+
+<ParamField body="linkPreview" type="WAUrlInfo | null">
+  Optional link preview information for URLs in the text
+</ParamField>
+
+<ParamField body="mentions" type="string[]">
+  List of JIDs that are mentioned in the text (e.g., `['1234567890@s.whatsapp.net']`)
+</ParamField>
+
+<ParamField body="contextInfo" type="proto.IContextInfo">
+  Additional context information (quoted messages, forwarding info, etc.)
+</ParamField>
+
+<ParamField body="edit" type="WAMessageKey">
+  Message key of the message to edit (for editing existing messages)
+</ParamField>
+
+**Type Definition:**
+```typescript
+type TextMessageContent = {
+  text: string
+  linkPreview?: WAUrlInfo | null
+} & Mentionable & Contextable & Editable
+```
+
+---
+
+## Media Messages
+
+### AnyMediaMessageContent
+
+Union type for all media message types.
+
+```typescript
+type AnyMediaMessageContent = (
+  | ImageMessageContent
+  | VideoMessageContent
+  | AudioMessageContent
+  | StickerMessageContent
+  | DocumentMessageContent
+) & { mimetype?: string } & Editable
+```
+
+### ImageMessageContent
+
+Send image messages with optional captions and dimensions.
+
+<ParamField body="image" type="WAMediaUpload" required>
+  The image file as Buffer, stream, or URL
+</ParamField>
+
+<ParamField body="caption" type="string">
+  Optional caption for the image
+</ParamField>
+
+<ParamField body="jpegThumbnail" type="string">
+  JPEG thumbnail as base64 string
+</ParamField>
+
+<ParamField body="width" type="number">
+  Image width in pixels
+</ParamField>
+
+<ParamField body="height" type="number">
+  Image height in pixels
+</ParamField>
+
+<ParamField body="mentions" type="string[]">
+  List of mentioned JIDs in the caption
+</ParamField>
+
+<ParamField body="contextInfo" type="proto.IContextInfo">
+  Additional context information
+</ParamField>
+
+<ParamField body="mimetype" type="string">
+  MIME type of the image (e.g., 'image/jpeg', 'image/png')
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ImageMessageContent = {
+  image: WAMediaUpload
+  caption?: string
+  jpegThumbnail?: string
+} & Mentionable & Contextable & WithDimensions
+```
+
+### VideoMessageContent
+
+Send video messages with optional captions, GIF playback, and PTV support.
+
+<ParamField body="video" type="WAMediaUpload" required>
+  The video file as Buffer, stream, or URL
+</ParamField>
+
+<ParamField body="caption" type="string">
+  Optional caption for the video
+</ParamField>
+
+<ParamField body="gifPlayback" type="boolean">
+  If true, plays the video as a looping GIF
+</ParamField>
+
+<ParamField body="jpegThumbnail" type="string">
+  JPEG thumbnail as base64 string
+</ParamField>
+
+<ParamField body="ptv" type="boolean">
+  If set to true, will send as a video note (round video message)
+</ParamField>
+
+<ParamField body="width" type="number">
+  Video width in pixels
+</ParamField>
+
+<ParamField body="height" type="number">
+  Video height in pixels
+</ParamField>
+
+<ParamField body="mentions" type="string[]">
+  List of mentioned JIDs in the caption
+</ParamField>
+
+<ParamField body="contextInfo" type="proto.IContextInfo">
+  Additional context information
+</ParamField>
+
+<ParamField body="mimetype" type="string">
+  MIME type of the video (e.g., 'video/mp4')
+</ParamField>
+
+**Type Definition:**
+```typescript
+type VideoMessageContent = {
+  video: WAMediaUpload
+  caption?: string
+  gifPlayback?: boolean
+  jpegThumbnail?: string
+  ptv?: boolean
+} & Mentionable & Contextable & WithDimensions
+```
+
+### AudioMessageContent
+
+Send audio messages or voice notes.
+
+<ParamField body="audio" type="WAMediaUpload" required>
+  The audio file as Buffer, stream, or URL
+</ParamField>
+
+<ParamField body="ptt" type="boolean">
+  If set to true, will send as a voice note (push-to-talk)
+</ParamField>
+
+<ParamField body="seconds" type="number">
+  Optional duration of the audio in seconds
+</ParamField>
+
+<ParamField body="mimetype" type="string">
+  MIME type of the audio (e.g., 'audio/ogg; codecs=opus', 'audio/mp4')
+</ParamField>
+
+**Type Definition:**
+```typescript
+type AudioMessageContent = {
+  audio: WAMediaUpload
+  ptt?: boolean
+  seconds?: number
+}
+```
+
+### StickerMessageContent
+
+Send sticker messages with optional animation.
+
+<ParamField body="sticker" type="WAMediaUpload" required>
+  The sticker file as Buffer, stream, or URL (WebP format)
+</ParamField>
+
+<ParamField body="isAnimated" type="boolean">
+  If true, the sticker is animated
+</ParamField>
+
+<ParamField body="width" type="number">
+  Sticker width in pixels
+</ParamField>
+
+<ParamField body="height" type="number">
+  Sticker height in pixels
+</ParamField>
+
+<ParamField body="mimetype" type="string">
+  MIME type (usually 'image/webp')
+</ParamField>
+
+**Type Definition:**
+```typescript
+type StickerMessageContent = {
+  sticker: WAMediaUpload
+  isAnimated?: boolean
+} & WithDimensions
+```
+
+### DocumentMessageContent
+
+Send document files with specified MIME type.
+
+<ParamField body="document" type="WAMediaUpload" required>
+  The document file as Buffer, stream, or URL
+</ParamField>
+
+<ParamField body="mimetype" type="string" required>
+  MIME type of the document (e.g., 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+</ParamField>
+
+<ParamField body="fileName" type="string">
+  Optional filename to display
+</ParamField>
+
+<ParamField body="caption" type="string">
+  Optional caption for the document
+</ParamField>
+
+<ParamField body="contextInfo" type="proto.IContextInfo">
+  Additional context information
+</ParamField>
+
+**Type Definition:**
+```typescript
+type DocumentMessageContent = {
+  document: WAMediaUpload
+  mimetype: string
+  fileName?: string
+  caption?: string
+} & Contextable
+```
+
+---
+
+## Interactive Messages
+
+### PollMessageContent
+
+Create poll messages with multiple selectable options.
+
+<ParamField body="poll" type="PollMessageOptions" required>
+  Poll configuration object
+</ParamField>
+
+<ParamField body="poll.name" type="string" required>
+  The poll question
+</ParamField>
+
+<ParamField body="poll.values" type="string[]" required>
+  Array of poll options
+</ParamField>
+
+<ParamField body="poll.selectableCount" type="number">
+  Number of options users can select (default: 1)
+</ParamField>
+
+<ParamField body="poll.messageSecret" type="Uint8Array">
+  32-byte message secret to encrypt poll selections
+</ParamField>
+
+<ParamField body="poll.toAnnouncementGroup" type="boolean">
+  Whether the poll is sent to an announcement group
+</ParamField>
+
+<ParamField body="mentions" type="string[]">
+  List of mentioned JIDs
+</ParamField>
+
+<ParamField body="contextInfo" type="proto.IContextInfo">
+  Additional context information
+</ParamField>
+
+**Type Definition:**
+```typescript
+type PollMessageContent = {
+  poll: PollMessageOptions
+} & Mentionable & Contextable & Editable
+
+type PollMessageOptions = {
+  name: string
+  selectableCount?: number
+  values: string[]
+  messageSecret?: Uint8Array
+  toAnnouncementGroup?: boolean
+}
+```
+
+### EventMessageContent
+
+Create event messages for scheduling meetings and calls.
+
+<ParamField body="event" type="EventMessageOptions" required>
+  Event configuration object
+</ParamField>
+
+<ParamField body="event.name" type="string" required>
+  Event name/title
+</ParamField>
+
+<ParamField body="event.startDate" type="Date" required>
+  Event start date and time
+</ParamField>
+
+<ParamField body="event.description" type="string">
+  Optional event description
+</ParamField>
+
+<ParamField body="event.endDate" type="Date">
+  Optional event end date and time
+</ParamField>
+
+<ParamField body="event.location" type="WALocationMessage">
+  Optional event location
+</ParamField>
+
+<ParamField body="event.call" type="'audio' | 'video'">
+  Type of call associated with the event
+</ParamField>
+
+<ParamField body="event.isCancelled" type="boolean">
+  Whether the event is cancelled
+</ParamField>
+
+<ParamField body="event.isScheduleCall" type="boolean">
+  Whether this is a scheduled call
+</ParamField>
+
+<ParamField body="event.extraGuestsAllowed" type="boolean">
+  Whether extra guests are allowed
+</ParamField>
+
+<ParamField body="event.messageSecret" type="Uint8Array">
+  Message secret for encryption
+</ParamField>
+
+**Type Definition:**
+```typescript
+type EventMessageOptions = {
+  name: string
+  description?: string
+  startDate: Date
+  endDate?: Date
+  location?: WALocationMessage
+  call?: 'audio' | 'video'
+  isCancelled?: boolean
+  isScheduleCall?: boolean
+  extraGuestsAllowed?: boolean
+  messageSecret?: Uint8Array
+}
+```
+
+### ReactionMessage
+
+React to messages with emojis.
+
+<ParamField body="react" type="proto.Message.IReactionMessage" required>
+  Reaction message object
+</ParamField>
+
+<ParamField body="react.key" type="WAMessageKey" required>
+  Key of the message to react to
+</ParamField>
+
+<ParamField body="react.text" type="string" required>
+  Emoji to react with (empty string to remove reaction)
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ReactionMessage = {
+  react: proto.Message.IReactionMessage
+}
+```
+
+---
+
+## Contact & Location Messages
+
+### ContactsMessageContent
+
+Share contact information.
+
+<ParamField body="contacts" type="object" required>
+  Contacts object containing display name and contact array
+</ParamField>
+
+<ParamField body="contacts.displayName" type="string">
+  Optional display name for the contacts
+</ParamField>
+
+<ParamField body="contacts.contacts" type="proto.Message.IContactMessage[]" required>
+  Array of contact messages
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ContactsMessageContent = {
+  contacts: {
+    displayName?: string
+    contacts: proto.Message.IContactMessage[]
+  }
+}
+```
+
+### LocationMessageContent
+
+Share location information.
+
+<ParamField body="location" type="WALocationMessage" required>
+  Location message object
+</ParamField>
+
+<ParamField body="location.degreesLatitude" type="number" required>
+  Latitude coordinate
+</ParamField>
+
+<ParamField body="location.degreesLongitude" type="number" required>
+  Longitude coordinate
+</ParamField>
+
+<ParamField body="location.name" type="string">
+  Optional location name
+</ParamField>
+
+<ParamField body="location.address" type="string">
+  Optional location address
+</ParamField>
+
+**Type Definition:**
+```typescript
+type LocationMessageContent = {
+  location: WALocationMessage
+}
+
+type WALocationMessage = proto.Message.ILocationMessage
+```
+
+---
+
+## Business Messages
+
+### ProductMessageContent
+
+Send product catalog messages.
+
+<ParamField body="product" type="WASendableProduct" required>
+  Product information object
+</ParamField>
+
+<ParamField body="businessOwnerJid" type="string">
+  JID of the business owner
+</ParamField>
+
+<ParamField body="body" type="string">
+  Optional message body text
+</ParamField>
+
+<ParamField body="footer" type="string">
+  Optional footer text
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ProductMessageContent = {
+  product: WASendableProduct
+  businessOwnerJid?: string
+  body?: string
+  footer?: string
+}
+
+type WASendableProduct = Omit<proto.Message.ProductMessage.IProductSnapshot, 'productImage'> & {
+  productImage: WAMediaUpload
+}
+```
+
+---
+
+## Reply & Interaction Messages
+
+### ButtonReplyMessageContent
+
+Reply to button messages.
+
+<ParamField body="buttonReply" type="ButtonReplyInfo" required>
+  Button reply information
+</ParamField>
+
+<ParamField body="buttonReply.displayText" type="string" required>
+  Display text of the button
+</ParamField>
+
+<ParamField body="buttonReply.id" type="string" required>
+  Button ID
+</ParamField>
+
+<ParamField body="buttonReply.index" type="number" required>
+  Button index
+</ParamField>
+
+<ParamField body="type" type="'template' | 'plain'" required>
+  Type of button reply
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ButtonReplyMessageContent = {
+  buttonReply: ButtonReplyInfo
+  type: 'template' | 'plain'
+}
+
+type ButtonReplyInfo = {
+  displayText: string
+  id: string
+  index: number
+}
+```
+
+### ListReplyMessageContent
+
+Reply to list messages.
+
+<ParamField body="listReply" type="Omit<proto.Message.IListResponseMessage, 'contextInfo'>" required>
+  List reply message object (without contextInfo)
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ListReplyMessageContent = {
+  listReply: Omit<proto.Message.IListResponseMessage, 'contextInfo'>
+}
+```
+
+### GroupInviteMessageContent
+
+Send group invitation messages.
+
+<ParamField body="groupInvite" type="GroupInviteInfo" required>
+  Group invitation information
+</ParamField>
+
+<ParamField body="groupInvite.inviteCode" type="string" required>
+  Group invite code
+</ParamField>
+
+<ParamField body="groupInvite.inviteExpiration" type="number" required>
+  Invite expiration timestamp
+</ParamField>
+
+<ParamField body="groupInvite.text" type="string" required>
+  Invitation text
+</ParamField>
+
+<ParamField body="groupInvite.jid" type="string" required>
+  Group JID
+</ParamField>
+
+<ParamField body="groupInvite.subject" type="string" required>
+  Group subject/name
+</ParamField>
+
+**Type Definition:**
+```typescript
+type GroupInviteMessageContent = {
+  groupInvite: GroupInviteInfo
+}
+
+type GroupInviteInfo = {
+  inviteCode: string
+  inviteExpiration: number
+  text: string
+  jid: string
+  subject: string
+}
+```
+
+---
+
+## Message Actions
+
+### ForwardMessage
+
+Forward existing messages.
+
+<ParamField body="forward" type="WAMessage" required>
+  The message to forward
+</ParamField>
+
+<ParamField body="force" type="boolean">
+  Force forwarding even if message is not forwardable
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ForwardMessage = {
+  forward: WAMessage
+  force?: boolean
+}
+```
+
+### DeleteMessage
+
+Delete messages (your own or anyone's in a group if you're an admin).
+
+<ParamField body="delete" type="WAMessageKey" required>
+  Message key of the message to delete
+</ParamField>
+
+**Type Definition:**
+```typescript
+type DeleteMessage = {
+  delete: WAMessageKey
+}
+```
+
+### PinMessage
+
+Pin messages in a chat.
+
+<ParamField body="pin" type="WAMessageKey" required>
+  Message key of the message to pin
+</ParamField>
+
+<ParamField body="type" type="proto.PinInChat.Type" required>
+  Pin type (PIN_IN_CHAT or UNPIN_IN_CHAT)
+</ParamField>
+
+<ParamField body="time" type="86400 | 604800 | 2592000">
+  Pin duration: 86400 (24 hours), 604800 (7 days), or 2592000 (30 days)
+</ParamField>
+
+**Type Definition:**
+```typescript
+type PinMessage = {
+  pin: WAMessageKey
+  type: proto.PinInChat.Type
+  time?: 86400 | 604800 | 2592000
+}
+```
+
+### DisappearingMessagesToggle
+
+Toggle disappearing messages in a chat.
+
+<ParamField body="disappearingMessagesInChat" type="boolean | number" required>
+  `false` to disable, or a number (in seconds) to enable with expiration time
+</ParamField>
+
+**Type Definition:**
+```typescript
+type DisappearingMessagesToggle = {
+  disappearingMessagesInChat: boolean | number
+}
+```
+
+### LimitSharingToggle
+
+Limit message forwarding and sharing.
+
+<ParamField body="limitSharing" type="boolean" required>
+  Whether to limit sharing of messages
+</ParamField>
+
+**Type Definition:**
+```typescript
+type LimitSharingToggle = {
+  limitSharing: boolean
+}
+```
+
+---
+
+## Privacy & Sharing
+
+### SharePhoneNumber
+
+Share your phone number.
+
+<ParamField body="sharePhoneNumber" type="boolean" required>
+  Whether to share phone number
+</ParamField>
+
+**Type Definition:**
+```typescript
+type SharePhoneNumber = {
+  sharePhoneNumber: boolean
+}
+```
+
+### RequestPhoneNumber
+
+Request phone number from recipient.
+
+<ParamField body="requestPhoneNumber" type="boolean" required>
+  Whether to request phone number
+</ParamField>
+
+**Type Definition:**
+```typescript
+type RequestPhoneNumber = {
+  requestPhoneNumber: boolean
+}
+```
+
+---
+
+## Helper Types
+
+### ViewOnce
+
+Make any message viewable only once.
+
+<ParamField body="viewOnce" type="boolean">
+  If true, the message will be viewable only once
+</ParamField>
+
+**Type Definition:**
+```typescript
+type ViewOnce = {
+  viewOnce?: boolean
+}
+```
+
+### Mentionable
+
+Add mentions to messages.
+
+**Type Definition:**
+```typescript
+type Mentionable = {
+  mentions?: string[]
+}
+```
+
+### Contextable
+
+Add context information to messages.
+
+**Type Definition:**
+```typescript
+type Contextable = {
+  contextInfo?: proto.IContextInfo
+}
+```
+
+### Editable
+
+Mark messages as edits of existing messages.
+
+**Type Definition:**
+```typescript
+type Editable = {
+  edit?: WAMessageKey
+}
+```
+
+### WithDimensions
+
+Specify media dimensions.
+
+**Type Definition:**
+```typescript
+type WithDimensions = {
+  width?: number
+  height?: number
+}
+```

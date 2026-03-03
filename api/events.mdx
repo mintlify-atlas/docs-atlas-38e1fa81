@@ -1,0 +1,593 @@
+---
+title: 'Events'
+description: 'Event emitter and event types for Baileys'
+---
+
+## Event Emitter
+
+The `WASocket` instance includes an event emitter accessible via `sock.ev`. Use it to listen for WhatsApp events.
+
+```typescript
+interface BaileysEventEmitter {
+    on<T extends BaileysEvent>(event: T, listener: (arg: BaileysEventMap[T]) => void): void
+    off<T extends BaileysEvent>(event: T, listener: (arg: BaileysEventMap[T]) => void): void
+    removeAllListeners<T extends BaileysEvent>(event: T): void
+    emit<T extends BaileysEvent>(event: T, arg: BaileysEventMap[T]): boolean
+}
+```
+
+### Example Usage
+
+```typescript
+import makeWASocket from '@whiskeysockets/baileys'
+
+const sock = makeWASocket({ auth: state })
+
+// Listen to connection updates
+sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update
+    
+    if(qr) {
+        console.log('QR Code:', qr)
+    }
+    
+    if(connection === 'close') {
+        console.log('Connection closed')
+    }
+})
+
+// Listen to new messages
+sock.ev.on('messages.upsert', ({ messages, type }) => {
+    console.log('Received', messages.length, 'messages')
+    
+    for(const msg of messages) {
+        console.log('Message from:', msg.key.remoteJid)
+    }
+})
+```
+
+## BaileysEventMap
+
+All available events and their payload types.
+
+## Connection Events
+
+<ResponseField name="connection.update" type="Partial<ConnectionState>">
+  Emitted when connection state changes (WebSocket opened, closed, connecting, etc.).
+  
+  ```typescript
+  sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect, qr, isNewLogin, isOnline } = update
+      
+      if(connection === 'close') {
+          // Handle disconnect
+          const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+          if(shouldReconnect) {
+              // Reconnect
+          }
+      } else if(connection === 'open') {
+          console.log('Connected successfully')
+      }
+  })
+  ```
+  
+  <ParamField path="connection" type="'open' | 'close' | 'connecting'">
+    Current connection state
+  </ParamField>
+  
+  <ParamField path="lastDisconnect" type="{ error?: Error; date?: Date }">
+    Information about the last disconnection
+  </ParamField>
+  
+  <ParamField path="qr" type="string">
+    QR code string for authentication (only during initial pairing)
+  </ParamField>
+  
+  <ParamField path="isNewLogin" type="boolean">
+    Whether this is a new login session
+  </ParamField>
+  
+  <ParamField path="isOnline" type="boolean">
+    Whether the phone is online
+  </ParamField>
+</ResponseField>
+
+## Authentication Events
+
+<ResponseField name="creds.update" type="Partial<AuthenticationCreds>">
+  Emitted when authentication credentials are updated. **Always save these updates** to maintain the session.
+  
+  ```typescript
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+  
+  const sock = makeWASocket({ auth: state })
+  
+  sock.ev.on('creds.update', saveCreds)
+  ```
+</ResponseField>
+
+## Message Events
+
+<ResponseField name="messages.upsert" type="object">
+  Emitted when new messages are received or updated.
+  
+  ```typescript
+  sock.ev.on('messages.upsert', ({ messages, type }) => {
+      for(const msg of messages) {
+          if(!msg.key.fromMe && type === 'notify') {
+              console.log('New message from', msg.key.remoteJid)
+              console.log('Message:', msg.message)
+          }
+      }
+  })
+  ```
+  
+  <ParamField path="messages" type="WAMessage[]" required>
+    Array of message objects
+  </ParamField>
+  
+  <ParamField path="type" type="MessageUpsertType" required>
+    Type of upsert:
+    - `'notify'` - Message received while connection was online
+    - `'append'` - Message from history sync
+  </ParamField>
+  
+  <ParamField path="requestId" type="string">
+    Present if message was received from the phone due to it being unavailable
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="messages.update" type="WAMessageUpdate[]">
+  Emitted when message metadata is updated (status, reactions, edits, etc.).
+  
+  ```typescript
+  sock.ev.on('messages.update', (updates) => {
+      for(const update of updates) {
+          console.log('Message', update.key.id, 'updated')
+          if(update.update.status) {
+              console.log('New status:', update.update.status)
+          }
+      }
+  })
+  ```
+  
+  Each update contains:
+  <ParamField path="key" type="WAMessageKey" required>
+    Message identifier
+  </ParamField>
+  
+  <ParamField path="update" type="Partial<WAMessage>" required>
+    Updated fields (status, reactions, pollUpdates, etc.)
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="messages.delete" type="object">
+  Emitted when messages are deleted.
+  
+  ```typescript
+  sock.ev.on('messages.delete', (deletion) => {
+      if('keys' in deletion) {
+          // Specific messages deleted
+          console.log('Deleted messages:', deletion.keys)
+      } else {
+          // All messages in chat deleted
+          console.log('All messages deleted in:', deletion.jid)
+      }
+  })
+  ```
+  
+  Two possible formats:
+  - `{ keys: WAMessageKey[] }` - Specific messages deleted
+  - `{ jid: string; all: true }` - All messages in chat cleared
+</ResponseField>
+
+<ResponseField name="messages.reaction" type="Array<{ key: WAMessageKey; reaction: proto.IReaction }>">
+  Emitted when messages receive reactions.
+  
+  ```typescript
+  sock.ev.on('messages.reaction', (reactions) => {
+      for(const { key, reaction } of reactions) {
+          console.log('Message', key.id, 'reacted with:', reaction.text)
+          if(!reaction.text) {
+              console.log('Reaction removed')
+          }
+      }
+  })
+  ```
+  
+  If `reaction.text` is falsy, the reaction was removed.
+</ResponseField>
+
+<ResponseField name="messages.media-update" type="Array<{ key: WAMessageKey; media?: object; error?: Boom }>">
+  Emitted when media message metadata is updated.
+  
+  <ParamField path="key" type="WAMessageKey" required>
+    Message identifier
+  </ParamField>
+  
+  <ParamField path="media" type="{ ciphertext: Uint8Array; iv: Uint8Array }">
+    Updated media encryption data
+  </ParamField>
+  
+  <ParamField path="error" type="Boom">
+    Error if media update failed
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="message-receipt.update" type="MessageUserReceiptUpdate[]">
+  Emitted when message receipts are updated (read, delivered, played).
+  
+  ```typescript
+  sock.ev.on('message-receipt.update', (receipts) => {
+      for(const receipt of receipts) {
+          console.log('Message', receipt.key.id, 'receipt updated')
+      }
+  })
+  ```
+</ResponseField>
+
+## Chat Events
+
+<ResponseField name="chats.upsert" type="Chat[]">
+  Emitted when new chats are created.
+  
+  ```typescript
+  sock.ev.on('chats.upsert', (chats) => {
+      console.log('New chats:', chats.length)
+      for(const chat of chats) {
+          console.log('Chat ID:', chat.id)
+      }
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="chats.update" type="ChatUpdate[]">
+  Emitted when chat metadata is updated.
+  
+  ```typescript
+  sock.ev.on('chats.update', (updates) => {
+      for(const update of updates) {
+          console.log('Chat', update.id, 'updated')
+          if(update.unreadCount !== undefined) {
+              console.log('Unread count:', update.unreadCount)
+          }
+      }
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="chats.delete" type="string[]">
+  Emitted when chats are deleted.
+  
+  ```typescript
+  sock.ev.on('chats.delete', (deletedChatIds) => {
+      console.log('Deleted chats:', deletedChatIds)
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="chats.lock" type="{ id: string; locked: boolean }">
+  Emitted when a chat is locked or unlocked.
+</ResponseField>
+
+## Contact Events
+
+<ResponseField name="contacts.upsert" type="Contact[]">
+  Emitted when new contacts are added.
+  
+  ```typescript
+  sock.ev.on('contacts.upsert', (contacts) => {
+      for(const contact of contacts) {
+          console.log('Contact:', contact.id, contact.name)
+      }
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="contacts.update" type="Partial<Contact>[]">
+  Emitted when contact information is updated.
+</ResponseField>
+
+## Group Events
+
+<ResponseField name="groups.upsert" type="GroupMetadata[]">
+  Emitted when new groups are created or joined.
+  
+  ```typescript
+  sock.ev.on('groups.upsert', (groups) => {
+      for(const group of groups) {
+          console.log('Group:', group.subject)
+          console.log('Participants:', group.participants.length)
+      }
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="groups.update" type="Partial<GroupMetadata>[]">
+  Emitted when group metadata is updated (name, description, settings, etc.).
+  
+  ```typescript
+  sock.ev.on('groups.update', (updates) => {
+      for(const update of updates) {
+          console.log('Group', update.id, 'updated')
+          if(update.subject) {
+              console.log('New name:', update.subject)
+          }
+      }
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="group-participants.update" type="object">
+  Emitted when group participants are added, removed, promoted, or demoted.
+  
+  ```typescript
+  sock.ev.on('group-participants.update', ({ id, participants, action }) => {
+      console.log('Group', id)
+      console.log('Action:', action) // 'add', 'remove', 'promote', 'demote'
+      console.log('Participants:', participants.map(p => p.id))
+  })
+  ```
+  
+  <ParamField path="id" type="string" required>
+    Group JID
+  </ParamField>
+  
+  <ParamField path="author" type="string" required>
+    JID of the user who performed the action
+  </ParamField>
+  
+  <ParamField path="participants" type="GroupParticipant[]" required>
+    Affected participants
+  </ParamField>
+  
+  <ParamField path="action" type="ParticipantAction" required>
+    Action performed: `'add'` | `'remove'` | `'promote'` | `'demote'`
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="group.join-request" type="object">
+  Emitted when someone requests to join a group.
+  
+  ```typescript
+  sock.ev.on('group.join-request', ({ id, participant, action }) => {
+      console.log('Join request in group', id)
+      console.log('Participant:', participant)
+      console.log('Action:', action) // 'created', 'revoked'
+  })
+  ```
+  
+  <ParamField path="id" type="string" required>
+    Group JID
+  </ParamField>
+  
+  <ParamField path="participant" type="string" required>
+    JID of the requesting user
+  </ParamField>
+  
+  <ParamField path="action" type="RequestJoinAction" required>
+    Action type
+  </ParamField>
+  
+  <ParamField path="method" type="RequestJoinMethod" required>
+    How the request was made
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="group.member-tag.update" type="object">
+  Emitted when labels are assigned to group members.
+  
+  <ParamField path="groupId" type="string" required>
+    Group JID
+  </ParamField>
+  
+  <ParamField path="participant" type="string" required>
+    Participant JID
+  </ParamField>
+  
+  <ParamField path="label" type="string" required>
+    Label assigned
+  </ParamField>
+</ResponseField>
+
+## Presence Events
+
+<ResponseField name="presence.update" type="{ id: string; presences: { [participant: string]: PresenceData } }">
+  Emitted when presence status of contacts changes (typing, recording, online, etc.).
+  
+  ```typescript
+  sock.ev.on('presence.update', ({ id, presences }) => {
+      console.log('Presence update in', id)
+      
+      for(const [participant, presence] of Object.entries(presences)) {
+          console.log(participant, 'is', presence.lastKnownPresence)
+          // 'unavailable', 'available', 'composing', 'recording'
+      }
+  })
+  ```
+</ResponseField>
+
+## History Sync Events
+
+<ResponseField name="messaging-history.set" type="object">
+  Emitted when history sync is received (chats, contacts, messages from paired device).
+  
+  ```typescript
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+      console.log('Received', chats.length, 'chats')
+      console.log('Received', contacts.length, 'contacts')
+      console.log('Received', messages.length, 'messages')
+      console.log('Is latest:', isLatest)
+  })
+  ```
+  
+  <ParamField path="chats" type="Chat[]" required>
+    Chat history
+  </ParamField>
+  
+  <ParamField path="contacts" type="Contact[]" required>
+    Contact list
+  </ParamField>
+  
+  <ParamField path="messages" type="WAMessage[]" required>
+    Message history
+  </ParamField>
+  
+  <ParamField path="isLatest" type="boolean">
+    Whether this is the most recent sync
+  </ParamField>
+  
+  <ParamField path="progress" type="number | null">
+    Sync progress (0-1)
+  </ParamField>
+  
+  <ParamField path="syncType" type="proto.HistorySync.HistorySyncType | null">
+    Type of history sync
+  </ParamField>
+</ResponseField>
+
+## Blocklist Events
+
+<ResponseField name="blocklist.set" type="{ blocklist: string[] }">
+  Emitted when the complete blocklist is set.
+  
+  ```typescript
+  sock.ev.on('blocklist.set', ({ blocklist }) => {
+      console.log('Blocked users:', blocklist)
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="blocklist.update" type="{ blocklist: string[]; type: 'add' | 'remove' }">
+  Emitted when users are added to or removed from the blocklist.
+  
+  ```typescript
+  sock.ev.on('blocklist.update', ({ blocklist, type }) => {
+      if(type === 'add') {
+          console.log('Blocked:', blocklist)
+      } else {
+          console.log('Unblocked:', blocklist)
+      }
+  })
+  ```
+</ResponseField>
+
+## Call Events
+
+<ResponseField name="call" type="WACallEvent[]">
+  Emitted when calls are received, accepted, or rejected.
+  
+  ```typescript
+  sock.ev.on('call', (calls) => {
+      for(const call of calls) {
+          console.log('Call from:', call.from)
+          console.log('Call status:', call.status) // 'offer', 'accept', 'reject', etc.
+          console.log('Is video:', call.isVideo)
+          console.log('Is group:', call.isGroup)
+      }
+  })
+  ```
+</ResponseField>
+
+## Label Events
+
+<ResponseField name="labels.edit" type="Label">
+  Emitted when a label is created, edited, or deleted.
+  
+  ```typescript
+  sock.ev.on('labels.edit', (label) => {
+      console.log('Label:', label.id, label.name)
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="labels.association" type="{ association: LabelAssociation; type: 'add' | 'remove' }">
+  Emitted when a label is associated with or removed from a chat/message.
+  
+  ```typescript
+  sock.ev.on('labels.association', ({ association, type }) => {
+      console.log('Label', association.labelId, type, 'to', association.chatId)
+  })
+  ```
+</ResponseField>
+
+## Newsletter Events
+
+<ResponseField name="newsletter.reaction" type="object">
+  Emitted when a newsletter message receives a reaction.
+  
+  <ParamField path="id" type="string" required>
+    Newsletter ID
+  </ParamField>
+  
+  <ParamField path="server_id" type="string" required>
+    Server message ID
+  </ParamField>
+  
+  <ParamField path="reaction" type="{ code?: string; count?: number; removed?: boolean }" required>
+    Reaction data
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="newsletter.view" type="{ id: string; server_id: string; count: number }">
+  Emitted when newsletter message view count is updated.
+</ResponseField>
+
+<ResponseField name="newsletter-participants.update" type="object">
+  Emitted when newsletter participants are updated.
+  
+  <ParamField path="id" type="string" required>
+    Newsletter ID
+  </ParamField>
+  
+  <ParamField path="user" type="string" required>
+    User JID
+  </ParamField>
+  
+  <ParamField path="new_role" type="string" required>
+    New role
+  </ParamField>
+  
+  <ParamField path="action" type="string" required>
+    Action performed
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="newsletter-settings.update" type="{ id: string; update: any }">
+  Emitted when newsletter settings are updated.
+</ResponseField>
+
+## Settings Events
+
+<ResponseField name="settings.update" type="union">
+  Emitted when WhatsApp settings are updated. Multiple types of settings:
+  
+  ```typescript
+  sock.ev.on('settings.update', (setting) => {
+      switch(setting.setting) {
+          case 'unarchiveChats':
+              console.log('Unarchive chats:', setting.value)
+              break
+          case 'locale':
+              console.log('Locale:', setting.value)
+              break
+          // ... other settings
+      }
+  })
+  ```
+  
+  Possible settings:
+  - `{ setting: 'unarchiveChats'; value: boolean }`
+  - `{ setting: 'locale'; value: string }`
+  - `{ setting: 'disableLinkPreviews'; value: proto.SyncActionValue.IPrivacySettingDisableLinkPreviewsAction }`
+  - `{ setting: 'timeFormat'; value: proto.SyncActionValue.ITimeFormatAction }`
+  - And more...
+</ResponseField>
+
+## LID Mapping Events
+
+<ResponseField name="lid-mapping.update" type="LIDMapping">
+  Emitted when phone number to LID (Linkable Identifier) mappings are updated.
+  
+  This is used internally for WhatsApp's multi-device protocol.
+</ResponseField>
