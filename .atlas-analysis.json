@@ -1,0 +1,148 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Baileys",
+  "projectDescription": "A WebSocket-based TypeScript library for interacting with the WhatsApp Web API",
+  "theme": "palm",
+  "primaryColor": "#25D366",
+  "lightColor": "#34E877",
+  "darkColor": "#1DA851",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "migration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/connection",
+              "concepts/authentication",
+              "concepts/events",
+              "concepts/store",
+              "concepts/whatsapp-ids"
+            ]
+          },
+          {
+            "group": "Sending Messages",
+            "pages": [
+              "messages/sending-text",
+              "messages/sending-media",
+              "messages/reactions-polls",
+              "messages/forwarding-quoting",
+              "messages/link-previews"
+            ]
+          },
+          {
+            "group": "Receiving Messages",
+            "pages": [
+              "receiving/event-handling",
+              "receiving/downloading-media",
+              "receiving/poll-votes"
+            ]
+          },
+          {
+            "group": "Chat Management",
+            "pages": [
+              "chats/modifying-chats",
+              "chats/presence-status",
+              "chats/privacy-settings",
+              "chats/profile-management"
+            ]
+          },
+          {
+            "group": "Groups",
+            "pages": [
+              "groups/creating-managing",
+              "groups/participants",
+              "groups/settings-metadata",
+              "groups/invites"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/custom-functionality",
+              "advanced/websocket-events",
+              "advanced/debugging",
+              "advanced/broadcast-stories"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/socket",
+              "api/socket-config",
+              "api/events"
+            ]
+          },
+          {
+            "group": "Messages",
+            "pages": [
+              "api/message-types",
+              "api/message-options",
+              "api/media-upload"
+            ]
+          },
+          {
+            "group": "Groups & Chats",
+            "pages": [
+              "api/groups",
+              "api/chats",
+              "api/privacy"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/auth-utils",
+              "api/message-utils",
+              "api/crypto-utils"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "WebSocket-based communication with WhatsApp Web",
+    "Multi-device authentication via QR code or pairing code",
+    "Send and receive all message types (text, media, polls, reactions)",
+    "Group management and participant operations",
+    "Event-driven architecture with typed events",
+    "Built-in message store and session management",
+    "Privacy settings and profile management",
+    "Broadcast lists and status/stories support",
+    "TypeScript support with full type definitions"
+  ],
+  "publicApiSurface": [
+    "makeWASocket",
+    "useMultiFileAuthState",
+    "makeInMemoryStore",
+    "downloadMediaMessage",
+    "getContentType",
+    "getDevice",
+    "makeCacheableSignalKeyStore",
+    "DisconnectReason",
+    "Browsers",
+    "WAMessageKey",
+    "WAMessage",
+    "AnyMessageContent",
+    "MiscMessageGenerationOptions",
+    "SocketConfig",
+    "BaileysEventMap",
+    "WASocket"
+  ]
+}
